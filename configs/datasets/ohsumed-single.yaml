@@ -1,0 +1,64 @@
+dataset:
+  name:
+    ohsumed-single
+  path:
+    joao-luz/ohsumed-single
+  label_feature:
+    label
+  classes:
+    0: Bacterial Infections and Mycoses
+    1: Virus Diseases
+    2: Parasitic Diseases
+    3: Neoplasms
+    4: Musculoskeletal Diseases
+    5: Digestive System Diseases
+    6: Stomatognathic Diseases
+    7: Respiratory Tract Diseases
+    8: Otorhinolaryngologic Diseases
+    9: Nervous System Diseases
+    10: Eye Diseases
+    11: Urologic and Male Genital Diseases
+    12: Female Genital Diseases and Pregnancy Complications
+    13: Cardiovascular Diseases
+    14: Hemic and Lymphatic Diseases
+    15: Neonatal Diseases and Abnormalities
+    16: Skin and Connective Tissue Diseases
+    17: Nutritional and Metabolic Diseases
+    18: Endocrine Diseases
+    19: Immunologic Diseases
+    20: Disorders of Environmental Origin
+    21: Animal Diseases
+    22: Pathological Conditions, Signs and Symptoms
+
+prompt_template: |
+  You are a topic analysis tool for analysing medical articles. Look at the following text:
+
+  {text}
+
+  What is the topic related to the text? Choose a topic from the following possible options:
+
+  0) Bacterial Infections and Mycoses
+  1) Virus Diseases
+  2) Parasitic Diseases
+  3) Neoplasms
+  4) Musculoskeletal Diseases
+  5) Digestive System Diseases
+  6) Stomatognathic Diseases
+  7) Respiratory Tract Diseases
+  8) Otorhinolaryngologic Diseases
+  9) Nervous System Diseases
+  10) Eye Diseases
+  11) Urologic and Male Genital Diseases
+  12) Female Genital Diseases and Pregnancy Complications
+  13) Cardiovascular Diseases
+  14) Hemic and Lymphatic Diseases
+  15) Neonatal Diseases and Abnormalities
+  16) Skin and Connective Tissue Diseases
+  17) Nutritional and Metabolic Diseases
+  18) Endocrine Diseases
+  19) Immunologic Diseases
+  20) Disorders of Environmental Origin
+  21) Animal Diseases
+  22) Pathological Conditions, Signs and Symptoms
+  
+  Respond ONLY with the topic number and no other information.

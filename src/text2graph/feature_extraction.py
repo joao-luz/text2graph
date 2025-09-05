@@ -1,0 +1,47 @@
+from .component import Component
+
+import torch
+
+from sentence_transformers import SentenceTransformer
+
+class FeatureExtractor(Component):
+    def __init__(self, name):
+        super().__init__(name)
+
+    def compute_representations(self, docs):
+        pass
+
+    def __call__(self):
+        pass
+
+class SentenceEmbedding(FeatureExtractor):
+    def __init__(self, model=None, model_path=None):
+        super().__init__('sentence_embedding')
+
+        assert model or model_path, 'Either pass a model or a model path'
+        
+        if model:
+            self.model = model
+        else:
+            self.model = SentenceTransformer(model_path)
+
+        self.str_parameters = {
+            'model': self.model
+        }
+
+    def compute_representations(self, texts):
+        embeddings = self.model.encode(texts, convert_to_tensor=True).cpu()
+
+        return embeddings
+    
+    def __call__(self, G):
+        texts = [G.nodes[n].get('text') for n in G.nodes]
+        embeddings = self.compute_representations(texts)
+
+        for n in G.nodes:
+            G.nodes[n]['embedding'] = embeddings[n]
+
+        del self.model
+        torch.cuda.empty_cache()
+
+        return G

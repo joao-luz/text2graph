@@ -1,0 +1,34 @@
+dataset:
+  name:
+    r8
+  path:
+    joao-luz/r8
+  label_feature:
+    label
+  classes:
+    0: acq
+    1: crude
+    2: earn
+    3: grain
+    4: interest
+    5: money-fx
+    6: ship
+    7: trade
+
+prompt_template: |
+  You are a topic analysis tool for analysing news articles. Look at the following text:
+
+  {text}
+
+  What is the topic related to the text? Choose a topic from the following possible options:
+
+  0) acq
+  1) crude
+  2) earn
+  3) grain
+  4) interest
+  5) money-fx
+  6) ship
+  7) trade
+
+  Respond ONLY with the topic number and no other information.

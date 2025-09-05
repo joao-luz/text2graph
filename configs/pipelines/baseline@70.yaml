@@ -1,0 +1,52 @@
+pipeline:
+  name:
+    baseline
+
+  components:
+    - name: sentence_embedding
+      parameters:
+        model_path:
+          all-MiniLM-L6-v2
+
+    - name: embedding_similarity
+      parameters:
+        embedding_feature:
+          embedding
+
+    - name: llm_labeler
+      parameters:
+        node_sampler:
+          name: random_sampler
+          parameters:
+            n: 0.7
+        model_path:
+          llama3.1
+        temperature:
+          0.0
+        prompt_template:
+          "You are a topic analysis tool. Look at the following text:
+
+          {text}
+
+          What is the topic related to the text? Choose a topic from the following possible options:
+
+          {options}
+
+          Respond ONLY with the topic and no other information."
+
+    - name: pickle_visualizer
+      parameters:
+        output_file:
+          labeled
+
+    - name: gcn_propagator
+      parameters:
+        epochs:
+          500
+        patience:
+          5
+        
+    - name: pickle_visualizer
+      parameters:
+        output_file:
+          propagated

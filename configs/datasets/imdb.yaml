@@ -1,0 +1,22 @@
+dataset:
+  name:
+    imdb
+  path:
+    pietrolesci/imdb
+  label_feature:
+    labels
+  classes:
+    0: negative
+    1: positive
+
+prompt_template: |
+  You are a sentiment analysis tool for analysing movie reviews. Look at the following text:
+
+  {text}
+
+  What is the sentiment related to the text? Choose one of the options below:
+
+  0) negative
+  1) positive
+
+  Respond ONLY with the sentiment number and no other information.

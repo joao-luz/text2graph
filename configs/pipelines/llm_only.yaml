@@ -1,0 +1,29 @@
+pipeline:
+  name:
+    llm_only
+
+  components:
+    - name: sentence_embedding
+      parameters:
+        model_path:
+          all-MiniLM-L6-v2
+    - name: llm_labeler
+      parameters:
+        node_sampler:
+          name: random_sampler
+          parameters:
+            n: 1.0
+        model_path:
+          llama3.1
+        temperature:
+          0.0
+        prompt_template: |
+          "You are a topic analysis tool. Look at the following text:
+
+          {text}
+
+          What is the topic related to the text? Choose a topic from the following possible options:
+
+          {options}
+
+          Respond ONLY with the topic and no other information."

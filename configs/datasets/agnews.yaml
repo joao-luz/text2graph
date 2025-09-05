@@ -1,0 +1,26 @@
+dataset:
+  name:
+    agnews
+  path:
+    pietrolesci/agnews
+  label_feature:
+    labels
+  classes:
+    0: world
+    1: sports
+    2: business
+    3: sci/tech
+
+prompt_template: |
+  You are a topic analysis tool for analysing news articles. Look at the following text:
+
+  {text}
+
+  What is the topic related to the text? Choose a topic from the following possible options:
+
+  0) world
+  1) sports
+  2) business
+  3) sci/tech
+
+  Respond ONLY with the topic number and no other information.
