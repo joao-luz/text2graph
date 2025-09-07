@@ -7,47 +7,45 @@ from .labeling import LLMLabeler, GroundTruthLabeler
 from .propagating import GCNPropagator, LMPropagator
 from .visualize import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
 
-component_map = {
-    'sentence_embedding': SentenceEmbedding,
-    'embedding_similarity': EmbeddingSimilarity,
-
-    'llm_labeler': LLMLabeler,
-    'ground_truth_labeler': GroundTruthLabeler,
-
-    'gcn_propagator': GCNPropagator,
-    'lm_propagator': LMPropagator,
-
-    'figure_visualizer': FigureVisualizer,
-    'gml_visualizer': GMLVisualizer,
-    'pickle_visualizer': PickleVisualizer,
-}
-
-sampler_map = {
-    'random_sampler': RandomSampler,
-    'degree_sampler': DegreeSampler
-}
-
-def replace_sampler(parameters):
-    for key,values in parameters.items():
-        if key == 'node_sampler' and not isinstance(values, NodeSampler):
-            name = parameters[key]['name']
-            sampler = sampler_map[name](**values['parameters'])
-            parameters[key] = sampler
-
-def load_steps_from_config(config):
-    steps = []
-    for component_config in config['pipeline']['components']:
-        name = component_config['name']
-        parameters = component_config['parameters']
-
-        replace_sampler(parameters)
-
-        component = component_map[name](**parameters)
-        steps.append(component)
-
-    return steps
-
 class Text2Graph:
+    component_map = {
+        'sentence_embedding': SentenceEmbedding,
+        'embedding_similarity': EmbeddingSimilarity,
+
+        'random_sampler': RandomSampler,
+        'degree_sampler': DegreeSampler,
+
+        'llm_labeler': LLMLabeler,
+        'ground_truth_labeler': GroundTruthLabeler,
+
+        'gcn_propagator': GCNPropagator,
+        'lm_propagator': LMPropagator,
+
+        'figure_visualizer': FigureVisualizer,
+        'gml_visualizer': GMLVisualizer,
+        'pickle_visualizer': PickleVisualizer,
+    }
+
+    def _replace_sampler(self, parameters):
+        for key,values in parameters.items():
+            if key == 'node_sampler' and not isinstance(values, NodeSampler):
+                name = parameters[key]['name']
+                sampler = Text2Graph.component_map[name](**values['parameters'])
+                parameters[key] = sampler
+
+    def _load_steps_from_config(self, config):
+        steps = []
+        for component_config in config['pipeline']['components']:
+            name = component_config['name']
+            parameters = component_config['parameters']
+
+            self._replace_sampler(parameters)
+
+            component = Text2Graph.component_map[name](**parameters)
+            steps.append(component)
+
+        return steps
+    
     def __init__(self, steps=None, config=None, name='', skip_visualization=False, output_dir='.'):
         assert steps or config, 'Either pass the pipeline steps or a config dict'
 
@@ -57,7 +55,7 @@ class Text2Graph:
         if steps:
             self.steps = steps
         else:
-            self.steps = load_steps_from_config(config)
+            self.steps = self._load_steps_from_config(config)
 
         self.output_dir = output_dir
     
