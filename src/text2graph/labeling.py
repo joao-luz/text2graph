@@ -4,6 +4,7 @@ from .sampling import RandomSampler, DegreeSampler
 
 import regex as re
 import torch
+import torch.nn.functional as F
 
 node_sampler_map = {
     'random_sampler': RandomSampler,
@@ -129,7 +130,19 @@ class LLMLabeler(Labeler):
         return data
     
 class LLMEnsembleLabeler(Labeler):
-    def __init__(self, prompt_template, node_sampler, model_paths, resolver='majority_vote', threshold=None, input_builder=None, response_parser=None, parser_args={}, temperature=0.0):
+    def __init__(self, 
+        prompt_template, 
+        node_sampler, 
+        model_paths, 
+        resolver='majority_vote', 
+        threshold=None,
+        concatenate_decisions_to_x=None,
+        decision_features_attribute=None, 
+        input_builder=None, 
+        response_parser=None, 
+        parser_args={}, 
+        temperature=0.0
+    ):
         super().__init__(f'llm_ensemble_labeler', node_sampler=node_sampler)
 
         self.model_paths = model_paths
@@ -161,6 +174,8 @@ class LLMEnsembleLabeler(Labeler):
         if resolver == 'majority_vote':
             self.resolver = majority_vote_resolver
 
+        self.decision_features_attribute = decision_features_attribute
+        self.concatenate_decisions_to_x = concatenate_decisions_to_x
         self.prompt_template = prompt_template
         self.node_sampler = node_sampler
         self.input_builder = input_builder or default_input_builder
@@ -217,14 +232,30 @@ class LLMEnsembleLabeler(Labeler):
                 decisions_full[node_id] = decisions[model][i]
             
             decisions[model] = decisions_full
+
+        def one_hot_with_ignore(labels, num_classes, ignore_index):
+            valid_mask = (labels != ignore_index).unsqueeze(-1)
+
+            processed_labels = labels.clone()
+            processed_labels[labels == ignore_index] = 0
+
+            one_hot = F.one_hot(processed_labels, num_classes=num_classes).float()
+            one_hot = one_hot * valid_mask.float()
             
-        return preds_full, probs_full, decisions
+            return one_hot
+
+        decisions_stacked = torch.stack(list(decisions.values()))
+        num_classes = len(data.id2label)
+        decision_features = one_hot_with_ignore(decisions_stacked.t(), num_classes, -1)
+        decision_features = decision_features.flatten(1)
+            
+        return preds_full, probs_full, decisions, decision_features
     
     def __call__(self, data):
         data = data.clone()
 
         node_ids = self.node_sampler.sample_nodes(data).tolist()
-        preds,probs,decisions = self.extract_labels(data, node_ids)
+        preds,probs,decisions,decision_features = self.extract_labels(data, node_ids)
 
         if not data.get('label_info'):
             data.label_info = [{} for _ in range(data.num_nodes)]
@@ -236,5 +267,14 @@ class LLMEnsembleLabeler(Labeler):
                 'prob': probs[node_id].item()}
         
         data.y = preds
+        
+        if self.concatenate_decisions_to_x:
+            if self.concatenate_decisions_to_x == 'prepend':
+                data.x = torch.concat((decision_features, data.x), dim=1)
+            else:
+                data.x = torch.concat((data.x, decision_features), dim=1)
+
+        elif self.decision_features_attribute:
+            data[self.decision_features_attribute] = decision_features
 
         return data
