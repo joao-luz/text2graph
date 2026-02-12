@@ -150,7 +150,7 @@ class LLMEnsembleLabeler(Labeler):
         def majority_vote_resolver(decisions):
             votes = torch.stack(list(decisions.values()))
             majority_votes,_ = torch.mode(votes, dim=0)
-            probs = torch.sum(votes == majority_votes, dim=0)/votes.shape[1]
+            probs = torch.sum(votes == majority_votes, dim=0)/votes.shape[0]
 
             return majority_votes, probs
 
