@@ -3,6 +3,7 @@ from .llm import LLM
 from .sampling import RandomSampler, DegreeSampler
 
 import regex as re
+import torch
 
 node_sampler_map = {
     'random_sampler': RandomSampler,
@@ -22,22 +23,35 @@ class Labeler(Component):
         pass
 
 class GroundTruthLabeler(Labeler):
-    def __init__(self, node_sampler, label_attribute='ground_truth'):
+    def __init__(self, node_sampler, label_attribute='true_label'):
         super().__init__('ground_truth_labeler', node_sampler)
 
         self.label_attribute = label_attribute
 
-    def extract_labels(self, nodes):
-        return [node[self.label_attribute] for node in nodes]
+    def extract_labels(self, data, node_ids):
+        ground_truths = data[self.label_attribute]
+
+        labels = torch.full((data.num_nodes, ), -1)
+        for node_id in node_ids:
+            labels[node_id] = ground_truths[node_id]
+
+        return labels
     
-    def __call__(self, G):
-        nodes = self.node_sampler.sample_nodes(G)
-        labels = self.extract_labels([G.nodes[n] for n in nodes])
+    def __call__(self, data):
+        data = data.clone()
 
-        for n,label in zip(nodes, labels):
-            G.nodes[n]['class'] = {'label': label, 'source': 'ground_truth', 'prob': 1.0}
+        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        labels = self.extract_labels(data, node_ids)
+        
+        if not data.get('label_info'):
+            data.label_info = [{} for _ in range(data.num_nodes)]
 
-        return G
+        for node_id in node_ids:
+            data.label_info[node_id] = {'source': 'ground_truth', 'prob': 1.0}
+        
+        data.y = labels
+
+        return data
 
 class LLMLabeler(Labeler):
     def __init__(self, prompt_template, node_sampler, input_builder=None, response_parser=None, model=None, model_path=None, parser_args={}, temperature=0.0):
@@ -50,9 +64,10 @@ class LLMLabeler(Labeler):
         else:
             self.model = LLM(model_path)
 
-        def default_input_builder(node):
-            index = sum(len(token) for token in node['text'].split()[:1200]) + 1200
-            text = node['text'][:index]
+        def default_input_builder(data, node_id, cap=1200):
+            text = data.text[node_id]
+            index = sum(len(token) for token in text.split()[:cap]) + cap
+            text = text[:index]
             return {'text': text}
 
         def default_parser(response, options):
@@ -85,19 +100,30 @@ class LLMLabeler(Labeler):
     def set_parser_args(self, new_args):
         self.parser_args = new_args
 
-    def extract_labels(self, nodes):
-        inputs = [self.input_builder(node) for node in nodes]
+    def extract_labels(self, data, node_ids):
+        inputs = [self.input_builder(data, node_id) for node_id in node_ids]
         prompts = [self.prompt_template.format(**input) for input in inputs]
         outputs = self.model.query(prompts, self.temperature)
         parsed = [self.response_parser(output, **self.parser_args) for output in outputs]
 
-        return parsed
+        labels = torch.full((data.num_nodes, ), -1)
+        for i,node_id in enumerate(node_ids):
+            labels[node_id] = data.label2id[parsed[i]]
+
+        return labels
     
-    def __call__(self, G):
-        nodes = self.node_sampler.sample_nodes(G)
-        labels = self.extract_labels([G.nodes[n] for n in nodes])
+    def __call__(self, data):
+        data = data.clone()
 
-        for n,label in zip(nodes, labels):
-            G.nodes[n]['class'] = {'label': label, 'source': self.model.name, 'prob': 1.0}
+        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        labels = self.extract_labels(data, node_ids)
 
-        return G
+        if not data.get('label_info'):
+            data.label_info = [{} for _ in range(data.num_nodes)]
+
+        for node_id in node_ids:
+            data.label_info[node_id] = {'source': self.model.name, 'prob': 1.0}
+        
+        data.y = labels
+
+        return data

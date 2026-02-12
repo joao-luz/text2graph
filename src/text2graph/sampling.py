@@ -1,6 +1,8 @@
-import random
-
 from .component import Component
+
+import random
+import torch
+from torch_geometric.utils import degree
 
 class NodeSampler(Component):
     def __init__(self, n, name=''):
@@ -11,19 +13,20 @@ class NodeSampler(Component):
             'n': n
         }
 
-    def sample_nodes(self, G, n):
+    def sample_nodes(self, data, n):
         pass
 
 class RandomSampler(NodeSampler):
     def __init__(self, n):
         super().__init__(n, 'random_sampler')
 
-    def sample_nodes(self, G, n=None):
+    def sample_nodes(self, data, n=None):
         n = n or self.n
         if isinstance(n, float):
-            n = int(len(G.nodes)*n)
+            n = int(data.num_nodes*n)
         
-        nodes = random.sample(range(len(G.nodes)), k=n)
+        nodes = random.sample(range(data.num_nodes), k=n)
+        nodes = torch.tensor(nodes)
 
         return nodes
 
@@ -31,13 +34,12 @@ class DegreeSampler(NodeSampler):
     def __init__(self, n):
         super().__init__(n, 'degree_sampler')
 
-    def sample_nodes(self, G, n=None):
+    def sample_nodes(self, data, n=None):
         n = n or self.n
         if isinstance(n, float):
-            n = int(len(G.nodes)*n)
+            n = int(data.num_nodes*n)
 
-        node_degrees = list(G.degree(G.nodes))
-        node_degrees.sort(key=lambda t: t[1], reverse=True)
-        nodes = [t[0] for t in node_degrees[:n]]
+        degrees = degree(data.edge_index, data.num_nodes)
+        _,indices = torch.sort(degrees, descending=True)
 
-        return nodes
+        return indices[:n]

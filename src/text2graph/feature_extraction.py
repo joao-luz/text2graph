@@ -30,18 +30,14 @@ class SentenceEmbedding(FeatureExtractor):
         }
 
     def compute_representations(self, texts):
-        embeddings = self.model.encode(texts, convert_to_tensor=True).cpu()
-
-        return embeddings
+        return self.model.encode(texts, convert_to_tensor=True).cpu()
     
-    def __call__(self, G):
-        texts = [G.nodes[n].get('text') for n in G.nodes]
-        embeddings = self.compute_representations(texts)
+    def __call__(self, data):
+        data = data.clone()
 
-        for n in G.nodes:
-            G.nodes[n]['embedding'] = embeddings[n]
+        data.x = self.compute_representations(data.text)
 
         del self.model
         torch.cuda.empty_cache()
 
-        return G
+        return data

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib as mpl
 import pickle
-import copy
+from torch_geometric.utils import to_networkx
 
 class GraphVisualizer(Component):
     def __init__(self, name, output_file=None):
@@ -22,7 +22,7 @@ class GraphVisualizer(Component):
     def set_output_dir(self, dir):
         self.output_dir = dir
 
-    def __call__(self, G):
+    def __call__(self, data):
         pass
     
 class FigureVisualizer(GraphVisualizer):
@@ -31,7 +31,8 @@ class FigureVisualizer(GraphVisualizer):
         super().__init__('figure_visualizer', output_file)
 
     def visualize(self, G):
-        classes = list(set([G.nodes[n].get('label') for n in G.nodes if G.nodes[n].get('label') is not None]))
+        id2label = G.graph['id2label']
+        classes = list(set([id2label[G.nodes[n].get('y')] for n in G.nodes if G.nodes[n].get('y') != -1]))
 
         if len(classes) <= 10:
             colors = mpl.colormaps['tab10'].colors
@@ -52,55 +53,46 @@ class FigureVisualizer(GraphVisualizer):
 
         node_colors = []
         for n in G.nodes:
-            label = G.nodes[n].get('label')
+            label = id2label[G.nodes[n].get('y')]
             color = 'lightgrey' if label is None else label2color[label]
             node_colors.append(color)
 
-        node_sizes = [20 if G.nodes[n].get('label') is not None else 10 for n in G.nodes]
+        node_sizes = [20 if G.nodes[n].get('y') != -1 else 10 for n in G.nodes]
         nx.draw_networkx(G, with_labels=False, font_size=9, node_color=node_colors, ax=ax, node_size=node_sizes, width=0.1)
 
         return fig
     
-    def __call__(self, G):
+    def __call__(self, data):
+        G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'], graph_attrs=['id2label'])
+
         fig = self.visualize(G)
 
         if self.output_file:
             fig.savefig(f'{self.output_dir}/{self.output_file}.png', bbox_inches='tight')
 
-        return G
-
-def _remove_attributes(G, attributes):
-    if not isinstance(attributes, list):
-        attributes = [attributes]
-
-    for _, data in G.nodes(data=True):
-        for attr in attributes:
-            if attr in data:
-                del data[attr]
-
-    return G
+        return data
 
 class GMLVisualizer(GraphVisualizer):
     def __init__(self, output_file=None):
         output_file = output_file + '.gml'
         super().__init__('gml_visualizer', output_file)
 
-    def __call__(self, G):
-        G_copy = _remove_attributes(copy.deepcopy(G), 'embedding')
+    def __call__(self, data):
+        G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'])
 
-        nx.write_gml(G_copy, f'{self.output_dir}/{self.output_file}')
+        nx.write_gml(G, f'{self.output_dir}/{self.output_file}')
 
-        return G
+        return data
     
 class PickleVisualizer(GraphVisualizer):
     def __init__(self, output_file=None):
         output_file = output_file + '.pkl'
         super().__init__('pickle_visualizer', output_file)
 
-    def __call__(self, G):
-        G_copy = _remove_attributes(copy.deepcopy(G), 'embedding')
+    def __call__(self, data):
+        G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'])
 
         with open(f'{self.output_dir}/{self.output_file}', 'wb') as f:
-            pickle.dump(G_copy, f)
+            pickle.dump(G, f)
 
-        return G
+        return data

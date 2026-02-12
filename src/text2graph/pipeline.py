@@ -1,4 +1,6 @@
-import networkx as nx
+import torch
+
+from torch_geometric.data import Data
 
 from .feature_extraction import SentenceEmbedding
 from .edge_estimation import EmbeddingSimilarity
@@ -37,7 +39,7 @@ class Text2Graph:
         steps = []
         for component_config in config['pipeline']['components']:
             name = component_config['name']
-            parameters = component_config['parameters']
+            parameters = component_config.get('parameters') or {}
 
             self._replace_sampler(parameters)
 
@@ -59,23 +61,17 @@ class Text2Graph:
 
         self.output_dir = output_dir
     
-    def _build_nodes(self, texts, labels=None):
-        G = nx.Graph()
+    def _build_data(self, texts, true_labels=None, id2label=None):
+        label2id = {v: k for k,v in id2label.items()}
+        data = Data(text=texts, true_label=torch.tensor(true_labels), label2id=label2id, id2label=id2label, num_nodes=len(texts))
 
-        for i,text in enumerate(texts):
-            G.add_node(i, text=text)
-        
-        if labels is not None:
-            for n in G.nodes:
-                G.nodes[n]['ground_truth'] = labels[n]
-
-        return G
+        return data
     
     def __str__(self):
         return 'Text2Graph(steps=[\n\t' + ',\n\t'.join([str(step) for step in self.steps]) + '\n])'
     
-    def __call__(self, texts, labels=None):
-        G = self._build_nodes(texts, labels)
+    def __call__(self, texts, true_labels=None, id2label=None):
+        data = self._build_data(texts, true_labels, id2label)
 
         for step in self.steps:
             if isinstance(step, GraphVisualizer):
@@ -87,6 +83,6 @@ class Text2Graph:
             string = str(step)
 
             print(f'Running {string}...')
-            G = step(G)
+            data = step(data)
 
-        return G
+        return data

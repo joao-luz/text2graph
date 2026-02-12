@@ -36,19 +36,18 @@ def run_pipeline(dataset_config, pipeline_config, output_dir, skip_visualization
     dataset = load_dataset(dataset_config['dataset']['path'])['test']    
 
     label_feature = dataset_config['dataset']['label_feature']
-    options = dataset_config['dataset']['classes']
-    classes = list(options.values())
+    id2label = dataset_config['dataset']['classes']
 
-    true = [classes[l] for l in dataset[label_feature]]
+    true_labels = dataset[label_feature]
 
     tracker = EmissionsTracker(output_file=f'{output_dir}/emissions.csv')
     tracker.start()
-    G = pipeline(dataset['text'], true)
+    data = pipeline(dataset['text'], true_labels=true_labels, id2label=id2label)
     tracker.stop()
 
-    pred = [G.nodes[n]['class']['label'] for n in G.nodes]
+    pred = data.y
 
-    report = classification_report(true, pred, output_dict=True)
+    report = classification_report(true_labels, pred, output_dict=True, target_names=id2label.values())
     df = pd.DataFrame(report).transpose()
     df.to_csv(f'{output_dir}/results.csv')
 

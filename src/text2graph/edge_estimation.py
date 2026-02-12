@@ -2,6 +2,7 @@ from .component import Component
 
 import torch
 import torch.nn.functional as F
+import numpy as np
 
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
@@ -31,7 +32,7 @@ class EmbeddingSimilarity(SimilarityEstimator):
         super().__init__(threshold, 'embedding_similarity')
 
         assert model or embedding_feature, 'Must pass either a model or the node feature to obtain the embedding from.'
-        assert mode in ['mst', 'threshold', 'knn']
+        assert mode in ['mst', 'threshold', 'knn', 'mst+knn']
 
         self.model = model
         self.embedding_feature = embedding_feature
@@ -45,13 +46,6 @@ class EmbeddingSimilarity(SimilarityEstimator):
             self.str_parameters['k'] = self.k
         else:
             self.str_parameters['threshold'] = self.threshold
-    
-    def _get_embeddings(self, G):
-        if self.embedding_feature:
-            return torch.stack([G.nodes[n][self.embedding_feature] for n in G.nodes])
-        else:
-            texts = [G.nodes[n]['text'] for n in G.nodes]
-            return self.model.encode(texts, convert_to_tensor=True)
 
     def _compute_similarities(self, embeddings):
         normalized = F.normalize(embeddings, 2, dim=1)
@@ -59,10 +53,24 @@ class EmbeddingSimilarity(SimilarityEstimator):
 
         return similarities
     
-    def __call__(self, G):
-        embeddings = torch.stack([G.nodes[n][self.embedding_feature] for n in G.nodes])
+    def _sparse_to_pyg(self, adj):
+        adj = adj.tocoo()  # ensure COO format
+        
+        edge_index = torch.tensor(
+            [adj.row, adj.col],
+            dtype=torch.long
+        )
+        
+        edge_weight = torch.tensor(adj.data, dtype=torch.float)
+        
+        return edge_index, edge_weight
+    
+    def __call__(self, data):
+        data = data.clone()
 
-        if self.mode == 'threshold' or self.mode == 'mst':
+        embeddings = data.x
+
+        if self.mode in ['threshold', 'mst', 'mst+knn']:
             similarities = self._compute_similarities(embeddings)
             threshold = self.threshold or _compute_minimum_threshold(similarities)
 
@@ -74,17 +82,13 @@ class EmbeddingSimilarity(SimilarityEstimator):
                 distance_matrix = 1.0 - edges
                 graph = csr_matrix(distance_matrix)
                 mst = minimum_spanning_tree(graph)
-                mst_dense = mst.toarray()
-                edges = mst_dense
+                edges = mst
             
-        elif self.mode == 'knn':
+        if self.mode in ['knn', 'mst+knn']:
             edges = kneighbors_graph(embeddings, n_neighbors=self.k, mode='distance', n_jobs=-1)
-            edges = edges.toarray()
         
         print(f'Will create {len(edges.nonzero()[0])} edges')
 
-        for i,j in zip(*edges.nonzero()):
-            if i < j:
-                G.add_edge(i, j, weight=edges[i][j].item())
+        data.edge_index, data.edge_weight = self._sparse_to_pyg(edges)
         
-        return G
+        return data
