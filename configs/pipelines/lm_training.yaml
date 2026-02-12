@@ -37,7 +37,7 @@ pipeline:
     - name: gml_visualizer
       parameters:
         output_file:
-          labeled.png
+          labeled
 
     - name: lm_propagator
       parameters:
@@ -49,4 +49,4 @@ pipeline:
     - name: gml_visualizer
       parameters:
         output_file:
-          propagated.png
+          propagated
