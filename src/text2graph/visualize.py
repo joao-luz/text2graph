@@ -77,8 +77,29 @@ class GMLVisualizer(GraphVisualizer):
         output_file = output_file + '.gml'
         super().__init__('gml_visualizer', output_file)
 
+    def _format_dict_keys(self, d):
+        def format(key_string):
+            return key_string.replace('.', '_')
+
+        new_dict = {}
+        for key, value in d.items():
+            formatted_key = format(key) if isinstance(key, str) else key
+            
+            if isinstance(value, dict):
+                new_dict[formatted_key] = self._format_dict_keys(value)
+            elif isinstance(value, list):
+                new_dict[formatted_key] = [self._format_dict_keys(item) if isinstance(item, dict) else item for item in value]
+            else:
+                new_dict[formatted_key] = value
+                
+        return new_dict
+
     def __call__(self, data):
         G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'])
+
+        # Format keys to fit the GML standard
+        for node_id in G.nodes:
+            G.nodes[node_id]['label_info'] = self._format_dict_keys(G.nodes[node_id]['label_info'])
 
         nx.write_gml(G, f'{self.output_dir}/{self.output_file}')
 
