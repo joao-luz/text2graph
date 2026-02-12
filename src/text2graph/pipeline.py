@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from .feature_extraction import SentenceEmbedding
 from .edge_estimation import EmbeddingSimilarity
 from .sampling import NodeSampler, RandomSampler, DegreeSampler
-from .labeling import LLMLabeler, GroundTruthLabeler
+from .labeling import LLMLabeler, LLMEnsembleLabeler, GroundTruthLabeler
 from .propagating import GCNPropagator, LMPropagator
 from .visualize import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
 
@@ -18,6 +18,7 @@ class Text2Graph:
         'degree_sampler': DegreeSampler,
 
         'llm_labeler': LLMLabeler,
+        'llm_ensemble_labeler': LLMEnsembleLabeler,
         'ground_truth_labeler': GroundTruthLabeler,
 
         'gcn_propagator': GCNPropagator,

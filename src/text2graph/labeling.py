@@ -127,3 +127,106 @@ class LLMLabeler(Labeler):
         data.y = labels
 
         return data
+    
+class LLMEnsembleLabeler(Labeler):
+    def __init__(self, prompt_template, node_sampler, model_paths, resolver='majority_vote', input_builder=None, response_parser=None, parser_args={}, temperature=0.0):
+        super().__init__(f'llm_ensemble_labeler', node_sampler=node_sampler)
+
+        self.model_paths = model_paths
+
+        def default_input_builder(data, node_id, cap=1200):
+            text = data.text[node_id]
+            index = sum(len(token) for token in text.split()[:cap]) + cap
+            text = text[:index]
+            return {'text': text}
+
+        def default_parser(response, options):
+            m = re.search(r'([0-9]+)', response)
+            if m: option = int(m[1])
+            else: option = 0
+
+            return options[option]
+        
+        def majority_vote_resolver(decisions):
+            votes = torch.stack(list(decisions.values()))
+            majority_votes,_ = torch.mode(votes, dim=0)
+            probs = torch.sum(votes == majority_votes, dim=0)/votes.shape[1]
+
+            return majority_votes, probs
+
+        if resolver == 'majority_vote':
+            self.resolver = majority_vote_resolver
+
+        self.prompt_template = prompt_template
+        self.node_sampler = node_sampler
+        self.input_builder = input_builder or default_input_builder
+        self.response_parser = response_parser or default_parser
+        self.parser_args = parser_args
+        self.temperature = temperature
+
+        if isinstance(node_sampler, str):
+            self.node_sampler = node_sampler_map[node_sampler]
+        else:
+            self.node_sampler = node_sampler
+
+        self.str_parameters = {
+            'models': self.model_paths,
+            'sampler': self.node_sampler
+        }
+
+    def set_prompt_template(self, new_template):
+        self.prompt_template = new_template
+
+    def set_parser_args(self, new_args):
+        self.parser_args = new_args
+
+    def extract_labels(self, data, node_ids):
+        inputs = [self.input_builder(data, node_id) for node_id in node_ids]
+        prompts = [self.prompt_template.format(**input) for input in inputs]
+
+        decisions = {}
+        for model_path in self.model_paths:
+            print(f'Voting with {model_path}...')
+            with LLM(model_path) as model:
+                outputs = model.query(prompts, self.temperature)
+
+            parsed = [self.response_parser(output, **self.parser_args) for output in outputs]
+
+            decisions[model_path] = torch.tensor([data.label2id[p] for p in parsed])
+
+        preds,probs = self.resolver(decisions)
+
+        preds_full = torch.full((data.num_nodes, ), -1)
+        probs_full = torch.zeros((data.num_nodes, ))
+        for i,node_id in enumerate(node_ids):
+            preds_full[node_id] = preds[i]
+            probs_full[node_id] = probs[i]
+
+        for model in self.model_paths:
+            decisions_full = torch.full((data.num_nodes, ), -1)
+
+            for i,node_id in enumerate(node_ids):
+                decisions_full[node_id] = decisions[model][i]
+            
+            decisions[model] = decisions_full
+            
+        return preds_full, probs_full, decisions
+    
+    def __call__(self, data):
+        data = data.clone()
+
+        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        preds,probs,decisions = self.extract_labels(data, node_ids)
+
+        if not data.get('label_info'):
+            data.label_info = [{} for _ in range(data.num_nodes)]
+
+        for node_id in node_ids:
+            data.label_info[node_id] = {
+                'source': ', '.join(self.model_paths),
+                'decisions': {model: decisions[model][node_id].item() for model in self.model_paths },
+                'prob': probs[node_id].item()}
+        
+        data.y = preds
+
+        return data

@@ -62,7 +62,7 @@ if __name__ == '__main__':
         # Replace default template with the dataset's template
         template = dataset_config['prompt_template']
         for component in pipeline_config['pipeline']['components']:
-            if component['name'] == 'llm_labeler':
+            if component['name'] in ['llm_labeler', 'llm_ensemble_labeler']:
                 component['parameters']['prompt_template'] = template
                 component['parameters']['parser_args'] = {'options': dataset_config['dataset']['classes']}
 
