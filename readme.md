@@ -54,3 +54,22 @@ dataset:
             second_parameter: second_value
             ...
 ```
+
+---
+
+Link to paper: https://ieeexplore.ieee.org/abstract/document/11264654
+
+If you use this pipeline, cite our work as:
+
+```bibtex
+@INPROCEEDINGS{11264654,
+  author={Sarcinelli, João Lucas Luz Lima and Marcacini, Ricardo Marcondes},
+  booktitle={2025 IEEE/SBC 37th International Symposium on Computer Architecture and High Performance Computing Workshops (SBAC-PADW)}, 
+  title={Text2Graph: Combining Lightweight LLMs and GNNs for Efficient Text Classification in Label-Scarce Scenarios}, 
+  year={2025},
+  volume={},
+  number={},
+  pages={124-130},
+  keywords={Sentiment analysis;Energy consumption;Costs;Annotations;Large language models;High performance computing;Text categorization;Zero shot learning;Feature extraction;Graph neural networks;Large Language Models (LLMs);Graph Neural Networks (GNNs);Zero-Shot Learning;Text-to-Graph;Sustainable AI},
+  doi={10.1109/SBAC-PADW69789.2025.00025}}
+```
