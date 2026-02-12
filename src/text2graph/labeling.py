@@ -129,7 +129,7 @@ class LLMLabeler(Labeler):
         return data
     
 class LLMEnsembleLabeler(Labeler):
-    def __init__(self, prompt_template, node_sampler, model_paths, resolver='majority_vote', input_builder=None, response_parser=None, parser_args={}, temperature=0.0):
+    def __init__(self, prompt_template, node_sampler, model_paths, resolver='majority_vote', threshold=None, input_builder=None, response_parser=None, parser_args={}, temperature=0.0):
         super().__init__(f'llm_ensemble_labeler', node_sampler=node_sampler)
 
         self.model_paths = model_paths
@@ -147,10 +147,14 @@ class LLMEnsembleLabeler(Labeler):
 
             return options[option]
         
-        def majority_vote_resolver(decisions):
+        self.threshold = threshold
+        def majority_vote_resolver(decisions, threshold=threshold):
             votes = torch.stack(list(decisions.values()))
             majority_votes,_ = torch.mode(votes, dim=0)
             probs = torch.sum(votes == majority_votes, dim=0)/votes.shape[0]
+
+            if threshold:
+                majority_votes[probs < threshold] = -1
 
             return majority_votes, probs
 
@@ -171,7 +175,8 @@ class LLMEnsembleLabeler(Labeler):
 
         self.str_parameters = {
             'models': self.model_paths,
-            'sampler': self.node_sampler
+            'sampler': self.node_sampler,
+            'resolver': self.resolver
         }
 
     def set_prompt_template(self, new_template):
@@ -202,6 +207,9 @@ class LLMEnsembleLabeler(Labeler):
             preds_full[node_id] = preds[i]
             probs_full[node_id] = probs[i]
 
+        if not any(preds_full != -1):
+            raise ValueError(f'No nodes labeled with at least {self.threshold:.2f} agreement between ensemble models.')
+
         for model in self.model_paths:
             decisions_full = torch.full((data.num_nodes, ), -1)
 
@@ -223,7 +231,7 @@ class LLMEnsembleLabeler(Labeler):
 
         for node_id in node_ids:
             data.label_info[node_id] = {
-                'source': ', '.join(self.model_paths),
+                'source': ', '.join(self.model_paths) + f' @ {self.threshold:.2f}',
                 'decisions': {model: decisions[model][node_id].item() for model in self.model_paths },
                 'prob': probs[node_id].item()}
         

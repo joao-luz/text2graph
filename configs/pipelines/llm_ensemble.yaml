@@ -36,6 +36,7 @@ pipeline:
 
           Respond ONLY with the topic and no other information."
         resolver: majority_vote
+        threshold: 0.5
 
     - name: gml_visualizer
       parameters:
