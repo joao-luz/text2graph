@@ -207,8 +207,10 @@ class LLMEnsembleLabeler(Labeler):
         decisions = {}
         for model_path in self.model_paths:
             print(f'Voting with {model_path}...')
-            with LLM(model_path) as model:
-                outputs = model.query(prompts, self.temperature)
+
+            model = LLM(model_path)
+            outputs = model.query(prompts, self.temperature)
+            del model
 
             parsed = [self.response_parser(output, **self.parser_args) for output in outputs]
 

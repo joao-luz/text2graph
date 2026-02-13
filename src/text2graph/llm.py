@@ -1,44 +1,18 @@
 import vllm
 
-import contextlib
 import gc
 import ray
 import torch
-from vllm.distributed import destroy_model_parallel, destroy_distributed_environment
 
 class LLM():
-    def __init__(self, model_name=None, load_model=False):
+    def __init__(self, model_path=None, load_model=False):
         self.model = None
-        self.name = ''
+        self.model_path = ''
 
-        if model_name is not None:
-            self.name = model_name
+        if model_path is not None:
+            self.model_path = self._name_mapping(model_path)
             if load_model:
-                self.model = self.load_model(model_name)
-
-    def _delete_model(self):
-        if self.model is None:
-            return
-
-        destroy_model_parallel()
-        destroy_distributed_environment()
-
-        del self.model.llm_engine.model_executor
-        del self.model
-
-        with contextlib.suppress(AssertionError):
-            torch.distributed.destroy_process_group()
-
-        gc.collect()
-        torch.cuda.empty_cache()
-        ray.shutdown()
-
-        self.model = None
-        self.name = ''
-
-    def __del__(self):
-        # self._delete_model()
-        pass
+                self.model = self.load_model()
 
     def _name_mapping(self, name):
         mapping = {
@@ -50,13 +24,33 @@ class LLM():
         }
 
         return mapping[name] if name in mapping else name
+    
+    def _delete_model(self):
+        if self.model is None:
+            return
+        
+        try:
+            del self.model
+        except Exception as e:
+            print(f"Failed to unload model: {e}")
+        finally:
+            gc.collect()
+            torch.cuda.empty_cache()
+            ray.shutdown()
 
-    def load_model(self, model_name):
+    def __del__(self):
         self._delete_model()
 
-        model_path = self._name_mapping(model_name)
+    def load_model(self, model_path=None):
+        model_path = model_path or self.model_path
+        if model_path is None:
+            raise ValueError(f'Must pass a model_name or have self.model_name set.')
 
-        self.name = model_name
+        self._delete_model()
+
+        model_path = self._name_mapping(model_path)
+
+        self.model_path = model_path
 
         if model_path == 'unsloth/Meta-Llama-3.1-70B-Instruct-bnb-4bit':
             model = vllm.LLM(model=model_path, trust_remote_code=True,
@@ -67,14 +61,14 @@ class LLM():
         else:
             model = vllm.LLM(model=model_path, trust_remote_code=True,
                              max_model_len=2048,
-                             gpu_memory_utilization=0.8,
+                             gpu_memory_utilization=0.9,
                              )
     
         self.model = model
     
     def query(self, prompts, temperature):
-        if self.model is None and self.name:
-            self.load_model(self.name)
+        if self.model is None and self.model_path:
+            self.load_model(self.model_path)
 
         chats = [[{'role': 'user', 'content': prompt}] for prompt in prompts]
         sampling_params = vllm.SamplingParams(temperature=temperature, max_tokens=1024)
