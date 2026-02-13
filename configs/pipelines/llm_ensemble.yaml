@@ -20,9 +20,9 @@ pipeline:
           parameters:
             n: 0.1
         model_paths:
+          - qwen2
           - llama3.1
           - gemma2
-          - phi3
         temperature:
           0.0
         prompt_template:
