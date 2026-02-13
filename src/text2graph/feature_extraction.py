@@ -1,6 +1,7 @@
 from .component import Component
 
 import torch
+import gc
 
 from sentence_transformers import SentenceTransformer
 
@@ -39,5 +40,6 @@ class SentenceEmbedding(FeatureExtractor):
 
         del self.model
         torch.cuda.empty_cache()
+        gc.collect()
 
         return data
