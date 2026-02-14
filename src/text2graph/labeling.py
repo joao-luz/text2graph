@@ -76,6 +76,9 @@ class LLMLabeler(Labeler):
             if m: option = int(m[1])
             else: option = 0
 
+            if option >= len(options):
+                option = 0
+
             return options[option]
 
         self.prompt_template = prompt_template
@@ -157,6 +160,9 @@ class LLMEnsembleLabeler(Labeler):
             m = re.search(r'([0-9]+)', response)
             if m: option = int(m[1])
             else: option = 0
+
+            if option >= len(options):
+                option = 0
 
             return options[option]
         
