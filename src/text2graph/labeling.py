@@ -1,6 +1,7 @@
 from .component import Component
 from .llm import LLM
-from .sampling import RandomSampler, DegreeSampler
+from .sampling.random import RandomSampler
+from .sampling.degree import DegreeSampler
 
 import regex as re
 import torch
@@ -12,10 +13,10 @@ node_sampler_map = {
 }
 
 class Labeler(Component):
-    def __init__(self, name, node_sampler):
+    def __init__(self, name, sample_mask_attribute='sample_mask'):
         super().__init__(name)
 
-        self.node_sampler = node_sampler
+        self.sample_mask_attribute = sample_mask_attribute
 
     def label(self, inputs):
         pass
@@ -24,8 +25,8 @@ class Labeler(Component):
         pass
 
 class GroundTruthLabeler(Labeler):
-    def __init__(self, node_sampler, label_attribute='true_label'):
-        super().__init__('ground_truth_labeler', node_sampler)
+    def __init__(self, sample_mask_attribute='sample_mask', label_attribute='true_label'):
+        super().__init__('ground_truth_labeler', sample_mask_attribute)
 
         self.label_attribute = label_attribute
 
@@ -41,7 +42,8 @@ class GroundTruthLabeler(Labeler):
     def __call__(self, data):
         data = data.clone()
 
-        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        label_mask = data[self.sample_mask_attribute]
+        node_ids = torch.nonzero(label_mask).flatten().tolist()
         labels = self.extract_labels(data, node_ids)
         
         if not data.get('label_info'):
@@ -55,8 +57,17 @@ class GroundTruthLabeler(Labeler):
         return data
 
 class LLMLabeler(Labeler):
-    def __init__(self, prompt_template, node_sampler, input_builder=None, response_parser=None, model=None, model_path=None, parser_args={}, temperature=0.0):
-        super().__init__(f'llm_labeler', node_sampler=node_sampler)
+    def __init__(self,
+        prompt_template,
+        sample_mask_attribute='sample_mask',
+        input_builder=None, 
+        response_parser=None, 
+        model=None, 
+        model_path=None, 
+        parser_args={}, 
+        temperature=0.0
+    ):
+        super().__init__(f'llm_labeler', sample_mask_attribute)
 
         assert model or model_path, 'Either pass a model or a model path'
 
@@ -82,16 +93,10 @@ class LLMLabeler(Labeler):
             return options[option]
 
         self.prompt_template = prompt_template
-        self.node_sampler = node_sampler
         self.input_builder = input_builder or default_input_builder
         self.response_parser = response_parser or default_parser
         self.parser_args = parser_args
         self.temperature = temperature
-
-        if isinstance(node_sampler, str):
-            self.node_sampler = node_sampler_map[node_sampler]
-        else:
-            self.node_sampler = node_sampler
 
         self.str_parameters = {
             'model': self.model.name,
@@ -119,7 +124,8 @@ class LLMLabeler(Labeler):
     def __call__(self, data):
         data = data.clone()
 
-        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        label_mask = data[self.sample_mask_attribute]
+        node_ids = torch.nonzero(label_mask).flatten().tolist()
         labels = self.extract_labels(data, node_ids)
 
         if not data.get('label_info'):
@@ -136,7 +142,8 @@ class LLMEnsembleLabeler(Labeler):
     def __init__(self, 
         prompt_template, 
         node_sampler, 
-        model_paths, 
+        model_paths,
+        sample_mask_attribute='sample_mask',
         resolver='majority_vote', 
         threshold=None,
         concatenate_decisions_to_x=None,
@@ -146,7 +153,7 @@ class LLMEnsembleLabeler(Labeler):
         parser_args={}, 
         temperature=0.0
     ):
-        super().__init__(f'llm_ensemble_labeler', node_sampler=node_sampler)
+        super().__init__(f'llm_ensemble_labeler', sample_mask_attribute)
 
         self.model_paths = model_paths
 
@@ -262,7 +269,8 @@ class LLMEnsembleLabeler(Labeler):
     def __call__(self, data):
         data = data.clone()
 
-        node_ids = self.node_sampler.sample_nodes(data).tolist()
+        label_mask = data[self.sample_mask_attribute]
+        node_ids = torch.nonzero(label_mask).flatten().tolist()
         preds,probs,decisions,decision_features = self.extract_labels(data, node_ids)
 
         if not data.get('label_info'):

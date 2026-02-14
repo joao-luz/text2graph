@@ -17,12 +17,12 @@ pipeline:
         k:
           5
 
+    - name: ramdom_sampler
+      parameters:
+        n: 0.1
+
     - name: llm_labeler
       parameters:
-        node_sampler:
-          name: random_sampler
-          parameters:
-            n: 0.1
         model_path:
           llama3.1
         temperature:

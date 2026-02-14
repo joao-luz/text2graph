@@ -13,12 +13,12 @@ pipeline:
         embedding_feature:
           embedding
 
+    - name: ramdom_sampler
+      parameters:
+        n: 0.5
+
     - name: llm_labeler
       parameters:
-        node_sampler:
-          name: random_sampler
-          parameters:
-            n: 0.5
         model_path:
           llama3.1
         temperature:

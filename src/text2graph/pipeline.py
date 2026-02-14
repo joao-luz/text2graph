@@ -4,7 +4,9 @@ from torch_geometric.data import Data
 
 from .feature_extraction import SentenceEmbedding
 from .edge_estimation import EmbeddingSimilarity
-from .sampling import NodeSampler, RandomSampler, DegreeSampler
+from .sampling.sampling import NodeSampler
+from .sampling.random import RandomSampler
+from .sampling.degree import DegreeSampler
 from .labeling import LLMLabeler, LLMEnsembleLabeler, GroundTruthLabeler
 from .propagating import GCNPropagator, LMPropagator
 from .visualize import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
