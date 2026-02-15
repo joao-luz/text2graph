@@ -47,7 +47,8 @@ class EmbeddingSimilarity(SimilarityEstimator):
     def _sparse_to_pyg(self, adj):
         adj = adj.tocoo()
         
-        return from_scipy_sparse_matrix(adj)
+        edge_index, edge_weight = from_scipy_sparse_matrix(adj)
+        return edge_index, edge_weight.to(torch.float32)
     
     def __call__(self, data):
         data = data.clone()
