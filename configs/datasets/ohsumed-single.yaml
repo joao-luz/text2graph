@@ -30,7 +30,10 @@ dataset:
     21: Animal Diseases
     22: Pathological Conditions, Signs and Symptoms
 
-prompt_template: |
+pseudo_sample_prompt_template: |
+  Suppose you are a medical specialist. There are now the medical paper subcategories: Bacterial Infections and Mycoses, Virus Diseases, Parasitic Diseases, Neoplasms, Musculoskeletal Diseases, Digestive System Diseases, Stomatognathic Diseases, Respiratory Tract Diseases, Otorhinolaryngologic Diseases, Nervous System Diseases, Eye Diseases, Urologic and Male Genital Diseases, Female Genital Diseases and Pregnancy Complications, Cardiovascular Diseases, Hemic and Lymphatic Diseases, Neonatal Diseases and Abnormalities, Skin and Connective Tissue Diseases, Nutritional and Metabolic Diseases, Endocrine Diseases, Immunologic Diseases, Disorders of Environmental Origin, Animal Diseases, Pathological Conditions, Signs and Symptoms. Please write a paper abstract of about 200 words, so that its classification best fits the "{category}" category.
+
+labeling_prompt_template: |
   You are a topic analysis tool for analysing medical articles. Look at the following text:
 
   {text}

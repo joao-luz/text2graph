@@ -11,7 +11,10 @@ dataset:
     2: business
     3: sci/tech
 
-prompt_template: |
+pseudo_sample_prompt_template: |
+  Suppose you are a jouranlist. There are now the news subcategories: world, sports, business, sci/tech. Please write a news article of about 200 words, so that its classification best fits the "{category}" category.
+
+labeling_prompt_template: |
   You are a topic analysis tool for analysing news articles. Look at the following text:
 
   {text}

@@ -15,7 +15,10 @@ dataset:
     6: ship
     7: trade
 
-prompt_template: |
+pseudo_sample_prompt_template: |
+  Suppose you are an economics jouranlist. There are now the news subcategories: acq, crude, earn, grain, interest, money-fx, ship, trade. Please write an economics news article of about 200 words, so that its classification best fits the "{category}" category.
+
+labeling_prompt_template: |
   You are a topic analysis tool for analysing news articles. Look at the following text:
 
   {text}

@@ -58,8 +58,11 @@ dataset:
     49: veg-oil
     50: wpi
     51: zinc
+ 
+pseudo_sample_prompt_template: |
+  Suppose you are an economics jouranlist. There are now the news subcategories: acq, alum, bop, carcass, cocoa, coffee, copper, cotton, cpi, cpu, crude, dlr, earn, fuel, gas, gnp, gold, grain, heat, housing, income, instal-debt, interest, ipi, iron-steel, jet, jobs, lead, lei, livestock, lumber, meal-feed, money-fx, money-supply, nat-gas, nickel, orange, pet-chem, platinum, potato, reserves, retail, rubber, ship, strategic-metal, sugar, tea, tin, trade, veg-oil, wpi, zinc. Please write an economics news article of about 200 words, so that its classification best fits the "{category}" category.
 
-prompt_template: |
+labeling_prompt_template: |
   You are a topic analysis tool for analysing news articles. Look at the following text:
 
   {text}
