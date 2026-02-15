@@ -7,6 +7,7 @@ import torch
 class LLM():
     def __init__(self, model_path=None, load_model=False):
         self.model = None
+        self.name = model_path
         self.model_path = ''
 
         if model_path is not None:
