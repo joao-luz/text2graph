@@ -60,7 +60,7 @@ if __name__ == '__main__':
         pipeline_config = load_from_yaml(f'{args.config_dir}/pipelines/{pipeline_name}.yaml')
 
         # Replace default template with the dataset's template
-        template = dataset_config['prompt_template']
+        template = dataset_config['labeling_prompt_template']
         for component in pipeline_config['pipeline']['components']:
             if component['name'] in ['llm_labeler', 'llm_ensemble_labeler']:
                 component['parameters']['prompt_template'] = template
