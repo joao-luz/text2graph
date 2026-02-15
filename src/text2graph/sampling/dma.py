@@ -318,8 +318,6 @@ class DMASampler(NodeSampler):
         if label_embedding_path: self.str_parameters['label_embedding_path'] = label_embedding_path
     
     def sample_nodes(self, data, n=None):
-        data = data.clone()
-
         n = n or self.n
         if isinstance(n, float):
             n = int(data.num_nodes*n)
