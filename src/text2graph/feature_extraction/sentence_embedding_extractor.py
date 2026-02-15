@@ -1,19 +1,9 @@
-from .component import Component
+from .feature_extraction import FeatureExtractor
 
 import torch
 import gc
 
 from sentence_transformers import SentenceTransformer
-
-class FeatureExtractor(Component):
-    def __init__(self, name):
-        super().__init__(name)
-
-    def compute_representations(self, docs):
-        pass
-
-    def __call__(self):
-        pass
 
 class SentenceEmbedding(FeatureExtractor):
     def __init__(self, model=None, model_path=None):

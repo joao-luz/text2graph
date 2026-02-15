@@ -1,60 +1,10 @@
-from .component import Component
-from .llm import LLM
-from .sampling.random import RandomSampler
-from .sampling.degree import DegreeSampler
+from ..llm import LLM
+from .labeling import Labeler
 
 import regex as re
 import torch
 import torch.nn.functional as F
 
-node_sampler_map = {
-    'random_sampler': RandomSampler,
-    'degree_sampler': DegreeSampler
-}
-
-class Labeler(Component):
-    def __init__(self, name, sample_mask_attribute='sample_mask'):
-        super().__init__(name)
-
-        self.sample_mask_attribute = sample_mask_attribute
-
-    def label(self, inputs):
-        pass
-
-    def __call__(self):
-        pass
-
-class GroundTruthLabeler(Labeler):
-    def __init__(self, sample_mask_attribute='sample_mask', label_attribute='true_label'):
-        super().__init__('ground_truth_labeler', sample_mask_attribute)
-
-        self.label_attribute = label_attribute
-
-    def extract_labels(self, data, node_ids):
-        ground_truths = data[self.label_attribute]
-
-        labels = torch.full((data.num_nodes, ), -1)
-        for node_id in node_ids:
-            labels[node_id] = ground_truths[node_id]
-
-        return labels
-    
-    def __call__(self, data):
-        data = data.clone()
-
-        label_mask = data[self.sample_mask_attribute]
-        node_ids = torch.nonzero(label_mask).flatten().tolist()
-        labels = self.extract_labels(data, node_ids)
-        
-        if not data.get('label_info'):
-            data.label_info = [{} for _ in range(data.num_nodes)]
-
-        for node_id in node_ids:
-            data.label_info[node_id] = {'source': 'ground_truth', 'prob': 1.0}
-        
-        data.y = labels
-
-        return data
 
 class LLMLabeler(Labeler):
     def __init__(self,
@@ -137,7 +87,8 @@ class LLMLabeler(Labeler):
         data.y = labels
 
         return data
-    
+
+
 class LLMEnsembleLabeler(Labeler):
     def __init__(self, 
         prompt_template, 
@@ -195,11 +146,6 @@ class LLMEnsembleLabeler(Labeler):
         self.response_parser = response_parser or default_parser
         self.parser_args = parser_args
         self.temperature = temperature
-
-        if isinstance(node_sampler, str):
-            self.node_sampler = node_sampler_map[node_sampler]
-        else:
-            self.node_sampler = node_sampler
 
         self.str_parameters = {
             'models': self.model_paths,

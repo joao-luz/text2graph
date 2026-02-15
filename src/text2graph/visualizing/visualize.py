@@ -1,4 +1,4 @@
-from .component import Component
+from ..component import Component
 
 import numpy as np
 import networkx as nx

@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report
 from argparse import ArgumentParser
 import yaml
 
-from text2graph.pipeline import Text2Graph
+from text2graph import Text2Graph
 
 def parse_args():
     parser = ArgumentParser()

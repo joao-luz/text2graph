@@ -1,0 +1,1 @@
+from .sentence_embedding_extractor import SentenceEmbedding

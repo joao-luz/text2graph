@@ -9,7 +9,7 @@ from .sampling.random import RandomSampler
 from .sampling.degree import DegreeSampler
 from .labeling import LLMLabeler, LLMEnsembleLabeler, GroundTruthLabeler
 from .propagating import GCNPropagator, LMPropagator
-from .visualize import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
+from .visualizing import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
 
 class Text2Graph:
     component_map = {

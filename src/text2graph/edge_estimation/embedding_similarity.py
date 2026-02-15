@@ -1,23 +1,13 @@
-from .component import Component
+from .edge_estimation import SimilarityEstimator
 
 import torch
 import torch.nn.functional as F
-from torch_geometric.utils import from_scipy_sparse_matrix
 
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
 from sklearn.neighbors import kneighbors_graph
+from torch_geometric.utils import from_scipy_sparse_matrix
 
-class SimilarityEstimator(Component):
-    def __init__(self, threshold, name):
-        super().__init__(name)
-        self.threshold = threshold
-
-    def compute_similarities(self, docs):
-        pass
-
-    def __call__(self, G):
-        pass
 
 def _compute_minimum_threshold(similarities):
     mask = ~torch.eye(similarities.size(0), dtype=bool)
@@ -26,6 +16,7 @@ def _compute_minimum_threshold(similarities):
     minimum_threshold = row_max.min()
 
     return minimum_threshold
+
 
 class EmbeddingSimilarity(SimilarityEstimator):
     def __init__(self, model=None, embedding_feature='x', threshold=None, k=None, mode='mst'):
