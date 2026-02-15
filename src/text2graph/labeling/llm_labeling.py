@@ -49,8 +49,7 @@ class LLMLabeler(Labeler):
         self.temperature = temperature
 
         self.str_parameters = {
-            'model': self.model.name,
-            'sampler': self.node_sampler
+            'model': self.model.name
         }
 
     def set_prompt_template(self, new_template):
@@ -91,8 +90,7 @@ class LLMLabeler(Labeler):
 
 class LLMEnsembleLabeler(Labeler):
     def __init__(self, 
-        prompt_template, 
-        node_sampler, 
+        prompt_template,
         model_paths,
         sample_mask_attribute='sample_mask',
         resolver='majority_vote', 
@@ -141,7 +139,6 @@ class LLMEnsembleLabeler(Labeler):
         self.decision_features_attribute = decision_features_attribute
         self.concatenate_decisions_to_x = concatenate_decisions_to_x
         self.prompt_template = prompt_template
-        self.node_sampler = node_sampler
         self.input_builder = input_builder or default_input_builder
         self.response_parser = response_parser or default_parser
         self.parser_args = parser_args
@@ -149,7 +146,6 @@ class LLMEnsembleLabeler(Labeler):
 
         self.str_parameters = {
             'models': self.model_paths,
-            'sampler': self.node_sampler,
             'resolver': self.resolver
         }
 
