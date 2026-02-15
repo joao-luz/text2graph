@@ -8,7 +8,7 @@ pipeline:
         model_path:
           all-MiniLM-L6-v2
 
-    - name: ramdom_sampler
+    - name: random_sampler
       parameters:
         n: 1.0
 

@@ -13,7 +13,7 @@ pipeline:
         embedding_feature:
           embedding
 
-    - name: ramdom_sampler
+    - name: random_sampler
       parameters:
         n: 0.8
 
