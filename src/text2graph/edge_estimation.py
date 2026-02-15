@@ -54,16 +54,9 @@ class EmbeddingSimilarity(SimilarityEstimator):
         return similarities
     
     def _sparse_to_pyg(self, adj):
-        adj = adj.tocoo()  # ensure COO format
+        adj = adj.tocoo()
         
-        edge_index = torch.tensor(
-            [adj.row, adj.col],
-            dtype=torch.long
-        )
-        
-        edge_weight = torch.tensor(adj.data, dtype=torch.float)
-        
-        return edge_index, edge_weight
+        return from_scipy_sparse_matrix(adj)
     
     def __call__(self, data):
         data = data.clone()
