@@ -321,6 +321,8 @@ class DMASampler(NodeSampler):
         data = data.clone()
 
         n = n or self.n
+        if isinstance(n, float):
+            n = int(data.num_nodes*n)
 
         categories = list(data.label2id.keys())
 
