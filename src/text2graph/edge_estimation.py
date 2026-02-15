@@ -2,7 +2,7 @@ from .component import Component
 
 import torch
 import torch.nn.functional as F
-import numpy as np
+from torch_geometric.utils import from_scipy_sparse_matrix
 
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
@@ -28,7 +28,7 @@ def _compute_minimum_threshold(similarities):
     return minimum_threshold
 
 class EmbeddingSimilarity(SimilarityEstimator):
-    def __init__(self, model=None, embedding_feature=None, threshold=None, k=None, mode='mst'):
+    def __init__(self, model=None, embedding_feature='x', threshold=None, k=None, mode='mst'):
         super().__init__(threshold, 'embedding_similarity')
 
         assert model or embedding_feature, 'Must pass either a model or the node feature to obtain the embedding from.'
@@ -61,7 +61,7 @@ class EmbeddingSimilarity(SimilarityEstimator):
     def __call__(self, data):
         data = data.clone()
 
-        embeddings = data.x
+        embeddings = data[self.embedding_feature]
 
         if self.mode in ['threshold', 'mst', 'mst+knn']:
             similarities = self._compute_similarities(embeddings)
