@@ -9,10 +9,7 @@ pipeline:
           all-MiniLM-L6-v2
 
     - name: embedding_similarity
-      parameters:
-        embedding_feature:
-          embedding
-
+      
     - name: random_sampler
       parameters:
         n: 0.8
