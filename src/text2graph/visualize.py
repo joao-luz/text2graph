@@ -53,12 +53,12 @@ class FigureVisualizer(GraphVisualizer):
 
         node_colors = []
         for n in G.nodes:
-            label = id2label[G.nodes[n].get('y')]
-            color = 'lightgrey' if label is None else label2color[label]
+            label = G.nodes[n].get('y')
+            color = 'lightgrey' if label == -1 else label2color[id2label[label]]
             node_colors.append(color)
 
-        node_sizes = [20 if G.nodes[n].get('y') != -1 else 10 for n in G.nodes]
-        nx.draw_networkx(G, with_labels=False, font_size=9, node_color=node_colors, ax=ax, node_size=node_sizes, width=0.1)
+        node_sizes = [20 if G.nodes[n].get('y') != -1 else 4 for n in G.nodes]
+        nx.draw_networkx(G, with_labels=False, arrows=False, font_size=9, node_color=node_colors, ax=ax, node_size=node_sizes, edgelist=[])
 
         return fig
     
