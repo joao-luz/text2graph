@@ -1,56 +1,21 @@
+from . import components
+from .components.visualizing import GraphVisualizer
+
 import torch
 
 from torch_geometric.data import Data
 
-from .feature_extraction import SentenceEmbedding
-from .edge_estimation import EmbeddingSimilarity
-from .sampling.sampling import NodeSampler
-from .sampling.random import RandomSampler
-from .sampling.degree import DegreeSampler
-from .labeling import LLMLabeler, LLMEnsembleLabeler, GroundTruthLabeler
-from .propagating import GCNPropagator, LMPropagator
-from .visualizing import GraphVisualizer, FigureVisualizer, GMLVisualizer, PickleVisualizer
+
+def load_steps_from_config(config):
+    steps = []
+    for component_config in config['pipeline']['components']:
+        component = components.component_from_config(component_config)
+        steps.append(component)
+
+    return steps
+
 
 class Text2Graph:
-    component_map = {
-        'sentence_embedding': SentenceEmbedding,
-        'embedding_similarity': EmbeddingSimilarity,
-
-        'random_sampler': RandomSampler,
-        'degree_sampler': DegreeSampler,
-
-        'llm_labeler': LLMLabeler,
-        'llm_ensemble_labeler': LLMEnsembleLabeler,
-        'ground_truth_labeler': GroundTruthLabeler,
-
-        'gcn_propagator': GCNPropagator,
-        'lm_propagator': LMPropagator,
-
-        'figure_visualizer': FigureVisualizer,
-        'gml_visualizer': GMLVisualizer,
-        'pickle_visualizer': PickleVisualizer,
-    }
-
-    def _replace_sampler(self, parameters):
-        for key,values in parameters.items():
-            if key == 'node_sampler' and not isinstance(values, NodeSampler):
-                name = parameters[key]['name']
-                sampler = Text2Graph.component_map[name](**values['parameters'])
-                parameters[key] = sampler
-
-    def _load_steps_from_config(self, config):
-        steps = []
-        for component_config in config['pipeline']['components']:
-            name = component_config['name']
-            parameters = component_config.get('parameters') or {}
-
-            self._replace_sampler(parameters)
-
-            component = Text2Graph.component_map[name](**parameters)
-            steps.append(component)
-
-        return steps
-    
     def __init__(self, steps=None, config=None, name='', skip_visualization=False, output_dir='.'):
         assert steps or config, 'Either pass the pipeline steps or a config dict'
 
@@ -60,7 +25,7 @@ class Text2Graph:
         if steps:
             self.steps = steps
         else:
-            self.steps = self._load_steps_from_config(config)
+            self.steps = load_steps_from_config(config)
 
         self.output_dir = output_dir
     

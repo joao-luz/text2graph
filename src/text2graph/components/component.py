@@ -1,3 +1,6 @@
+from .component_factory import register_component
+
+
 class Component:
     name = ''
     def __init__(self, name):
@@ -7,3 +10,6 @@ class Component:
     def __str__(self):
         params_str = ', '.join(f'{key}={value}' for key,value in self.str_parameters.items())
         return self.name.replace('_', ' ').title().replace(' ', '') + f'({params_str})'
+
+
+register_component('component', Component)
