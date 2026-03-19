@@ -348,3 +348,18 @@ class DMASampler(NodeSampler):
         print(len(sample_mask.nonzero().flatten()))
 
         return data
+    
+    @classmethod
+    def from_config(cls, params, *args, extra_config={}, **kwargs):
+        print(kwargs)
+        prompt_template = params['prompt_template']
+        if isinstance(prompt_template, dict):
+            # keys_list = prompt_template['source'].split('.')
+            # template = get_nested_value(extra_config, keys_list)
+            template = ('{' + prompt_template["source"] + '}').format(**extra_config)
+            params['prompt_template'] = template
+
+        params['label_embedding_dir'] = params['label_embedding_dir'].format(**extra_config)
+        params['pseudo_sample_dir'] = params['pseudo_sample_dir'].format(**extra_config)
+        
+        return super().from_config(params, **kwargs)

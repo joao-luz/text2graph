@@ -86,6 +86,15 @@ class LLMLabeler(Labeler):
         data.y = labels
 
         return data
+    
+    @classmethod
+    def from_config(cls, params, *args, extra_config={}, **kwargs):
+        prompt_template = params['prompt_template']
+        if isinstance(prompt_template, dict):
+            template = ('{' + prompt_template["source"] + '}').format(**extra_config)
+            params['prompt_template'] = template
+        
+        return super().from_config(params, **kwargs)
 
 
 class LLMEnsembleLabeler(Labeler):
@@ -236,3 +245,13 @@ class LLMEnsembleLabeler(Labeler):
             data[self.decision_features_attribute] = decision_features
 
         return data
+    
+    @classmethod
+    def from_config(cls, params, *args, extra_config={}, **kwargs):
+        print(kwargs)
+        prompt_template = params['prompt_template']
+        if isinstance(prompt_template, dict):
+            template = ('{' + prompt_template["source"] + '}').format(**extra_config)
+            params['prompt_template'] = template
+        
+        return super().from_config(params, **kwargs)
