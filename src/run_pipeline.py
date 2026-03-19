@@ -32,17 +32,22 @@ def load_from_yaml(file_path):
     return config
 
 def run_pipeline(dataset_config, pipeline_config, output_dir, skip_visualization):
-    pipeline = Text2Graph(config=pipeline_config, skip_visualization=skip_visualization, output_dir=output_dir)
-    dataset = load_dataset(dataset_config['dataset']['path'])['test']    
+    pipeline = Text2Graph(
+        config=pipeline_config, 
+        skip_visualization=skip_visualization, 
+        output_dir=output_dir,
+        extra_config={'dataset': dataset_config}
+    )
+    dataset = load_dataset(dataset_config['path'])['test']    
 
-    label_feature = dataset_config['dataset']['label_feature']
-    id2label = dataset_config['dataset']['classes']
+    label_feature = dataset_config['label_feature']
+    id2label = dataset_config['classes']
 
     true_labels = dataset[label_feature]
 
     tracker = EmissionsTracker(output_file=f'{output_dir}/emissions.csv')
     tracker.start()
-    data = pipeline(dataset['text'], true_labels=true_labels, id2label=id2label)
+    data = pipeline(dataset['text'], dataset_config=dataset_config, true_labels=true_labels, id2label=id2label)
     tracker.stop()
 
     pred = data.y
@@ -60,11 +65,11 @@ if __name__ == '__main__':
         pipeline_config = load_from_yaml(f'{args.config_dir}/pipelines/{pipeline_name}.yaml')
 
         # Replace default template with the dataset's template
-        template = dataset_config['labeling_prompt_template']
-        for component in pipeline_config['pipeline']['components']:
-            if component['name'] in ['llm_labeler', 'llm_ensemble_labeler']:
-                component['parameters']['prompt_template'] = template
-                component['parameters']['parser_args'] = {'options': dataset_config['dataset']['classes']}
+        # template = dataset_config['labeling_prompt_template']
+        # for component in pipeline_config['pipeline']['components']:
+        #     if component['name'] in ['llm_labeler', 'llm_ensemble_labeler']:
+        #         component['parameters']['prompt_template'] = template
+        #         component['parameters']['parser_args'] = {'options': dataset_config['classes']}
 
         for run in range(args.runs):
             current_config = copy.deepcopy(pipeline_config)

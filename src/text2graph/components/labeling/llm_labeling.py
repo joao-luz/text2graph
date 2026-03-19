@@ -73,6 +73,8 @@ class LLMLabeler(Labeler):
     def forward(self, data, *args, dataset_config={}, **kwargs):
         data = data.clone()
 
+        self.parser_args['options'] = dataset_config['classes']
+
         label_mask = data[self.sample_mask_attribute]
         node_ids = torch.nonzero(label_mask).flatten().tolist()
         labels = self.extract_labels(data, node_ids)
