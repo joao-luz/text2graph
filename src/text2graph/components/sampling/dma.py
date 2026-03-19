@@ -3,6 +3,7 @@ from .sampling import NodeSampler
 
 import copy
 import json
+import gc
 import pathlib
 import torch
 import torch.nn.functional as F
@@ -78,7 +79,7 @@ def update_reliability_single_node(reliability_score, num_node, node, adj_vec, l
         sim_feat = similarity_feat[n]
 
         if idx_used_mask[n].item() == 1:
-            off_prob = labels_sim[node_label][node_label]
+            off_prob = labels_sim[n_label][node_label]
         else:
             off_prob = sim_label[node_label]
 
@@ -283,9 +284,9 @@ def generate_similarities(model_path, pseudo_samples, label_embedding_path=None)
         inputs = tokenizer(pseudo_samples, padding=True, truncation=True, return_tensors="pt").to(model.device)
         with torch.no_grad():
             outputs = model(**inputs)
-        
-        last_hidden_states = outputs['last_hidden_state']
-        attention_masks = inputs['attention_mask']
+
+        last_hidden_states = outputs['last_hidden_state'].to('cpu')
+        attention_masks = inputs['attention_mask'].to('cpu')
         unsqueezed_attention_masks = torch.unsqueeze(attention_masks, dim=-1)
         masked_hidden_states = last_hidden_states * unsqueezed_attention_masks
         hidden_sum = torch.sum(masked_hidden_states, dim=1)
@@ -295,6 +296,12 @@ def generate_similarities(model_path, pseudo_samples, label_embedding_path=None)
         if label_embedding_path:
             pathlib.Path(label_embedding_path).parent.mkdir(parents=True, exist_ok=True)
             torch.save(embeddings, label_embedding_path)
+
+        # Free model and other data
+        model.to('cpu')
+        del model, inputs, outputs
+        torch.cuda.empty_cache()
+        gc.collect()
 
     feature_similarity = torch.mm(embeddings, embeddings.t())
     norm = torch.norm(feature_similarity, 2, 1, keepdim=True).add(1e-8)
@@ -306,9 +313,12 @@ def generate_similarities(model_path, pseudo_samples, label_embedding_path=None)
 
 
 class DMASampler(NodeSampler):
-    def __init__(self, model_path, prompt_template, pseudo_sample_path=None, label_embedding_path=None, n=None):
+    def __init__(self, model_path, prompt_template, pseudo_sample_dir=None, label_embedding_dir=None, n=None):
         super().__init__(n, 'dma_sampler')
 
+        model_name = model_path.split('.')[-1]
+        pseudo_sample_path =  f'{pseudo_sample_dir}/{model_name}.json'
+        label_embedding_path =  f'{label_embedding_dir}/{model_name}.pt'
         self.pseudo_sample_path = pseudo_sample_path
         self.label_embedding_path = label_embedding_path
         self.model_path = model_path

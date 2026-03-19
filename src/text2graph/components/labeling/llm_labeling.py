@@ -87,6 +87,8 @@ class LLMLabeler(Labeler):
         
         data.y = labels
 
+        self.model._delete_model()
+
         return data
     
     @classmethod
