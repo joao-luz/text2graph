@@ -18,7 +18,7 @@ class GroundTruthLabeler(Labeler):
 
         return labels
     
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         data = data.clone()
 
         label_mask = data[self.sample_mask_attribute]

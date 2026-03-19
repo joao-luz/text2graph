@@ -23,7 +23,7 @@ class SentenceEmbedding(FeatureExtractor):
     def compute_representations(self, texts):
         return self.model.encode(texts, convert_to_tensor=True).cpu()
     
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         data = data.clone()
 
         data.x = self.compute_representations(data.text)

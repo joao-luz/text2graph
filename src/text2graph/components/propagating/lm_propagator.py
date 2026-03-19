@@ -84,7 +84,7 @@ class LMPropagator(LabelPropagator):
 
         return preds, probs
 
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         data = data.clone()
 
         train_mask = data.y != -1

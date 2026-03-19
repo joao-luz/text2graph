@@ -70,7 +70,7 @@ class LLMLabeler(Labeler):
 
         return labels
     
-    def __call__(self, data):
+    def forward(self, data, *args, dataset_config={}, **kwargs):
         data = data.clone()
 
         label_mask = data[self.sample_mask_attribute]
@@ -208,7 +208,7 @@ class LLMEnsembleLabeler(Labeler):
             
         return preds_full, probs_full, decisions, decision_features
     
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         data = data.clone()
 
         label_mask = data[self.sample_mask_attribute]

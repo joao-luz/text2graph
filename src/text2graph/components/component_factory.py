@@ -13,10 +13,10 @@ def get_component(name):
     return _registry[name]
 
 
-def component_from_config(config):
+def component_from_config(config, **kwargs):
     name = config['name']
 
-    cls = get_component(config['name'])
+    cls = get_component(name)
     params = config.get('parameters', {})
 
-    return cls(**params)
+    return cls.from_config(params, **kwargs)

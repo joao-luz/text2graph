@@ -50,7 +50,7 @@ class EmbeddingSimilarity(SimilarityEstimator):
         edge_index, edge_weight = from_scipy_sparse_matrix(adj)
         return edge_index, edge_weight.to(torch.float32)
     
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         data = data.clone()
 
         embeddings = data[self.embedding_feature]

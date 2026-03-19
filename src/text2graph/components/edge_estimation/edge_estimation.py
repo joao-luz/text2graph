@@ -9,7 +9,4 @@ class SimilarityEstimator(Component):
     def compute_similarities(self, docs):
         pass
 
-    def __call__(self, G):
-        pass
-
 

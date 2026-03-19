@@ -22,7 +22,7 @@ class RandomSampler(NodeSampler):
 
         return sample_mask
     
-    def __call__(self, data, n=None):
+    def forward(self, data, *args, n=None, **kwargs):
         data = data.clone()
 
         sample_mask = self.sample_nodes(data, n)

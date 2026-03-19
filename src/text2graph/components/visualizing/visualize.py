@@ -22,8 +22,6 @@ class GraphVisualizer(Component):
     def set_output_dir(self, dir):
         self.output_dir = dir
 
-    def __call__(self, data):
-        pass
     
 class FigureVisualizer(GraphVisualizer):
     def __init__(self, output_file=None):
@@ -62,7 +60,7 @@ class FigureVisualizer(GraphVisualizer):
 
         return fig
     
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'], graph_attrs=['id2label'])
 
         fig = self.visualize(G)
@@ -94,7 +92,7 @@ class GMLVisualizer(GraphVisualizer):
                 
         return new_dict
 
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'])
 
         # Format keys to fit the GML standard
@@ -110,7 +108,7 @@ class PickleVisualizer(GraphVisualizer):
         output_file = output_file + '.pkl'
         super().__init__('pickle_visualizer', output_file)
 
-    def __call__(self, data):
+    def forward(self, data, *args, **kwargs):
         G = to_networkx(data, node_attrs=['text', 'y', 'label_info'], edge_attrs=['edge_weight'])
 
         with open(f'{self.output_dir}/{self.output_file}', 'wb') as f:

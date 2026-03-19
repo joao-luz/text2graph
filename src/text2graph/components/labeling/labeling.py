@@ -9,6 +9,3 @@ class Labeler(Component):
 
     def label(self, inputs):
         pass
-
-    def __call__(self):
-        pass 

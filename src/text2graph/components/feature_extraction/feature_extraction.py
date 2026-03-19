@@ -7,6 +7,3 @@ class FeatureExtractor(Component):
     def compute_representations(self, docs):
         pass
 
-    def __call__(self):
-        pass
-

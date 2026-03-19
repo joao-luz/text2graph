@@ -1,4 +1,4 @@
-from .component import Component
+from .component import Component, RepeatComponent
 from .component_factory import register_component, get_component, component_from_config
 
 from .edge_estimation import EmbeddingSimilarity
@@ -8,6 +8,9 @@ from .propagating import *
 from .sampling import *
 from .visualizing import *
 
+
+register_component('component', Component)
+register_component('repeat', RepeatComponent)
 
 register_component('embedding_similarity', EmbeddingSimilarity)
 
@@ -32,6 +35,7 @@ register_component('pickle_visualizer', PickleVisualizer)
 
 __all__ = [
     'Component',
+    'RepeatComponent',
     'register_component',
     'get_component',
     'component_from_config'

@@ -6,17 +6,17 @@ import torch
 from torch_geometric.data import Data
 
 
-def load_steps_from_config(config):
+def load_steps_from_config(config, **kwargs):
     steps = []
     for component_config in config['pipeline']['components']:
-        component = components.component_from_config(component_config)
+        component = components.component_from_config(component_config, **kwargs)
         steps.append(component)
 
     return steps
 
 
 class Text2Graph:
-    def __init__(self, steps=None, config=None, name='', skip_visualization=False, output_dir='.'):
+    def __init__(self, steps=None, config=None, name='', skip_visualization=False, output_dir='.', **kwargs):
         assert steps or config, 'Either pass the pipeline steps or a config dict'
 
         self.name = name
@@ -25,7 +25,7 @@ class Text2Graph:
         if steps:
             self.steps = steps
         else:
-            self.steps = load_steps_from_config(config)
+            self.steps = load_steps_from_config(config, **kwargs)
 
         self.output_dir = output_dir
     
@@ -38,7 +38,7 @@ class Text2Graph:
     def __str__(self):
         return 'Text2Graph(steps=[\n\t' + ',\n\t'.join([str(step) for step in self.steps]) + '\n])'
     
-    def __call__(self, texts, true_labels=None, id2label=None):
+    def __call__(self, texts, true_labels=None, id2label=None, dataset_config=None, **kwargs):
         data = self._build_data(texts, true_labels, id2label)
 
         for step in self.steps:
@@ -51,6 +51,6 @@ class Text2Graph:
             string = str(step)
 
             print(f'Running {string}...')
-            data = step(data)
+            data = step(data, dataset_config=dataset_config, **kwargs)
 
         return data
