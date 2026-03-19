@@ -9,7 +9,8 @@ pipeline:
           all-MiniLM-L6-v2
 
     - name: embedding_similarity
-              mode:
+      parameters:
+        mode:
           knn
         k:
           5
@@ -25,15 +26,7 @@ pipeline:
         temperature:
           0.0
         prompt_template:
-          "You are a topic analysis tool. Look at the following text:
-
-          {text}
-
-          What is the topic related to the text? Choose a topic from the following possible options:
-
-          {options}
-
-          Respond ONLY with the topic and no other information."
+          source: dataset[labeling_prompt_template]
 
     - name: figure_visualizer
       parameters:

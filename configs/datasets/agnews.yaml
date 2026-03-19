@@ -1,15 +1,14 @@
-dataset:
-  name:
-    agnews
-  path:
-    pietrolesci/agnews
-  label_feature:
-    labels
-  classes:
-    0: world
-    1: sports
-    2: business
-    3: sci/tech
+name:
+  agnews
+path:
+  pietrolesci/agnews
+label_feature:
+  labels
+classes:
+  0: world
+  1: sports
+  2: business
+  3: sci/tech
 
 pseudo_sample_prompt_template: |
   Suppose you are a jouranlist. There are now the news subcategories: world, sports, business, sci/tech. Please write a news article of about 200 words, so that its classification best fits the "{category}" category.

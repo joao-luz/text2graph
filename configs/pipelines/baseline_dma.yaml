@@ -1,0 +1,64 @@
+pipeline:
+  name:
+    baseline
+
+  components:
+    - name: sentence_embedding
+      parameters:
+        model_path:
+          all-MiniLM-L6-v2
+
+    - name: embedding_similarity
+      
+    - name: random_sampler
+      parameters:
+        n: 100
+
+    - name: llm_labeler
+      parameters:
+        model_path:
+          meta-llama/Llama-3.1-8B-Instruct
+        temperature:
+          0.0
+        prompt_template:
+          source: dataset[labeling_prompt_template]
+
+    - name: repeat
+      parameters:
+        repeat: 4
+        steps:
+        - name: dma_sampler
+          parameters:
+            n: 100
+            model_path:
+              meta-llama/Llama-3.1-8B-Instruct
+            prompt_template:
+              source: dataset[pseudo_sample_prompt_template]
+            pseudo_sample_dir: ../data/{dataset[name]}/pseudo_samples
+            label_embedding_dir: ../data/{dataset[name]}/label_embedding
+            
+        - name: llm_labeler
+          parameters:
+            model_path:
+              meta-llama/Llama-3.1-8B-Instruct
+            temperature:
+              0.0
+            prompt_template:
+              source: dataset[labeling_prompt_template]
+
+    - name: gml_visualizer
+      parameters:
+        output_file:
+          labeled
+
+    - name: gcn_propagator
+      parameters:
+        epochs:
+          500
+        patience:
+          5
+        
+    - name: gml_visualizer
+      parameters:
+        output_file:
+          propagated

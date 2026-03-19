@@ -1,13 +1,12 @@
-dataset:
-  name:
-    imdb
-  path:
-    pietrolesci/imdb
-  label_feature:
-    labels
-  classes:
-    0: negative
-    1: positive
+name:
+  imdb
+path:
+  pietrolesci/imdb
+label_feature:
+  labels
+classes:
+  0: negative
+  1: positive
 
 pseudo_sample_prompt_template: |
   Suppose you are an internet movie critic. There are now the movie review subcategories: positive and negative. Please write an internet movie review of about 50 to 100 words, so that its classification best fits the "{category}" category.
