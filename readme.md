@@ -57,6 +57,10 @@ dataset:
 
 ---
 
+## Paper
+
+This was, originally, a repository for the paper titled "Text2Graph: Combining Lightweight LLMs and GNNs for Efficient Text Classification in Label-Scarce Scenarios". If you wish to see the paper's repo, change into branch `paper`
+
 Link to paper: https://ieeexplore.ieee.org/abstract/document/11264654
 
 If you use this pipeline, cite our work as:
