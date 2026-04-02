@@ -1,4 +1,4 @@
-from . import components
+from .components import component_from_config
 from .components.visualizing import GraphVisualizer
 
 import torch
@@ -9,7 +9,7 @@ from torch_geometric.data import Data
 def load_steps_from_config(config, **kwargs):
     steps = []
     for component_config in config['pipeline']['components']:
-        component = components.component_from_config(component_config, **kwargs)
+        component = component_from_config(component_config, **kwargs)
         steps.append(component)
 
     return steps

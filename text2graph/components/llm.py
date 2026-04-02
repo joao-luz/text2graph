@@ -38,6 +38,8 @@ class LLM():
             gc.collect()
             torch.cuda.empty_cache()
             ray.shutdown()
+            
+        self.model = None
 
     def __del__(self):
         self._delete_model()
