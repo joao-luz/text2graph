@@ -2,28 +2,45 @@
 
 This is a unified pipeline for solving text classification problems via graphs with no labeled instances and using an LLM for pseudo-labeling.
 
-To run, install dependencies from `requirements.txt` and execute
+## Installation
 
-```bash
-cd src
-python3 run_pipeline.py --datasets first_dataset second_dataset --pipelines first_pipeline second_pipeline --runs 5
+To install the package, first create a virtual environment:
+
+```
+python3 -m venv .venv
 ```
 
-Pipeline and dataset configurations may be set using `.yaml` files. For datasets, you must define a file with the following attributes:
+Go into the root of the repository and run:
+
+```
+pip install . -f https://data.pyg.org/whl/torch-<torch_version>+<cuda_version>.html
+```
+
+Notice that this package makes use of [torch-geometric](https://pytorch-geometric.readthedocs.io/en/latest/) and its additional libraries. Thus, to correctly install them, the extra wheel information is passed via the `-f` argument during `pip install`. To figure out the correct wheel link to use in your case, look into torch-geometric's [official instructions](https://pytorch-geometric.readthedocs.io/en/2.4.0/install/installation.html).
+
+## Running the example
+
+To run the (currently single) example script, go into the `examples/` dir and run:
+
+```
+cd src
+python3 run_pipeline.py
+```
+
+This example runs many pipelines and datasets defined by `.yaml` files in `examples/configs/`. Pipeline and dataset configurations may be set using `.yaml` files. For datasets, you must define a file with the following attributes:
 
 ```yaml
-dataset:
-  name:
-    dataset_name
-  path:
-    path/to/dataset_or_huggingface_path
-  label_feature:
-    dataset_feature_for_labels
-  classes:
-    0: supported
-    1: classes
-    2: in
-    3: dataset
+name:
+  dataset_name
+path:
+  path/to/dataset_or_huggingface_path
+label_feature:
+  dataset_feature_for_labels
+classes:
+  0: supported
+  1: classes
+  2: in
+  3: dataset
 
 prompt_template: |
   Template for the LLM to process a text from the dataset. Should look something like this:
@@ -42,7 +59,7 @@ prompt_template: |
   Respond ONLY with the topic number and no other information.
 
 ```
-For the pipeline, you must define a name and the components. Each component goes under the `component:` item in a list form (see `configs/pipelines/baseline.yaml` for an in depth example). The component is identified with a name and is given its parameters:
+For the pipeline, you must define a name and the components. Each component goes under the `component:` item in a list form (see `examples/configs/pipelines/baseline.yaml` for an in depth example). The component is identified with a name and is given its parameters:
 
 ```yaml
 dataset:
@@ -55,7 +72,6 @@ dataset:
             ...
 ```
 
----
 
 ## Paper
 
