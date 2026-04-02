@@ -17,8 +17,8 @@ def parse_args():
 
     parser.add_argument('--datasets', type=str, nargs='+', default=['agnews', 'ohsumed-single', 'r8', 'r52', 'imdb'])
     parser.add_argument('--pipelines', type=str, nargs='+', default=['baseline', 'ground_truth_labels', 'llm_only'])
-    parser.add_argument('--config_dir', type=str, default='../configs')
-    parser.add_argument('--output_dir', type=str, default='../results')
+    parser.add_argument('--config_dir', type=str, default='configs')
+    parser.add_argument('--output_dir', type=str, default='results')
     parser.add_argument('--runs', type=int, default=3)
     parser.add_argument('--skip_visualization', action='store_true', default=False)
     parser.add_argument('--rerun_existing', action='store_true', default=False)
