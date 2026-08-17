@@ -1,5 +1,2 @@
-from .gcn_propagator import GCNPropagator
-from .lm_propagator import LMPropagator
-
-
-__all__ = ['GCNPropagator', 'LMPropagator']
+from .gcn import GCNPropagator
+from .language_model import LMPropagator

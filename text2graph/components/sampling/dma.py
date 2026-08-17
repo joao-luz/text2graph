@@ -1,5 +1,8 @@
-from ..llm import LLM
-from .sampling import NodeSampler
+# Code originally from https://github.com/PKU-DAIR/Noisy-LLM-Oracle
+
+from ..component import Component
+from ..component_registry import register_component
+from ...llm import LLM
 
 import copy
 import json
@@ -7,7 +10,9 @@ import gc
 import pathlib
 import torch
 import torch.nn.functional as F
+
 from torch_geometric.utils import remove_self_loops, scatter, add_self_loops
+from torch_geometric.data import HeteroData
 from torch_sparse import SparseTensor
 from transformers import AutoModel, AutoTokenizer
 
@@ -19,6 +24,8 @@ def get_max_reliable_influ_node(high_score_nodes, activated_node, reliability_li
 
     activated_node_num_list = []
 
+    max_ral_node = 0
+    max_activated_num = 0
     for i in range(num_high_score_nodes):
         node = high_score_nodes[i].item()
 
@@ -246,7 +253,7 @@ def dma(features, labels, edge_index, total_node_number, labels_sim, idx_avilabl
     return train_mask.bool()
 
 
-def generate_pseudo_samples(model_path, prompt_template, categories, pseudo_sample_path=None, temperature=0.7):
+def generate_pseudo_samples(model, prompt_template, categories, pseudo_sample_path=None, temperature=0.7):
     if pseudo_sample_path and pathlib.Path(pseudo_sample_path).is_file():
         with open(pseudo_sample_path) as f:
             data = json.load(f)
@@ -256,9 +263,8 @@ def generate_pseudo_samples(model_path, prompt_template, categories, pseudo_samp
 
     prompts = [prompt_template.format(category=category) for category in categories]
     
-    model = LLM(model_path)
-    pseudo_samples = model.query(prompts, temperature)
-    del model
+    pseudo_samples = model.invoke(prompts, temperature)
+    model.unload_model()
 
     if pseudo_sample_path:
         pathlib.Path(pseudo_sample_path).parent.mkdir(parents=True, exist_ok=True)
@@ -269,39 +275,17 @@ def generate_pseudo_samples(model_path, prompt_template, categories, pseudo_samp
     return pseudo_samples
 
 
-def generate_similarities(model_path, pseudo_samples, label_embedding_path=None):
+def generate_similarities(model, pseudo_samples, label_embedding_path=None):
     if label_embedding_path and pathlib.Path(label_embedding_path).is_file():
         embeddings = torch.load(label_embedding_path)
     else:
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-        tokenizer.pad_token = tokenizer.eos_token
-        model = AutoModel.from_pretrained(
-            model_path,
-            dtype=torch.bfloat16,
-            device_map="auto"
-        )
-
-        inputs = tokenizer(pseudo_samples, padding=True, truncation=True, return_tensors="pt").to(model.device)
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        last_hidden_states = outputs['last_hidden_state'].to('cpu')
-        attention_masks = inputs['attention_mask'].to('cpu')
-        unsqueezed_attention_masks = torch.unsqueeze(attention_masks, dim=-1)
-        masked_hidden_states = last_hidden_states * unsqueezed_attention_masks
-        hidden_sum = torch.sum(masked_hidden_states, dim=1)
-        attention_sum = torch.sum(unsqueezed_attention_masks, dim=1)
-        embeddings = torch.div(hidden_sum, attention_sum)
+        embeddings = model.embed(pseudo_samples)
 
         if label_embedding_path:
             pathlib.Path(label_embedding_path).parent.mkdir(parents=True, exist_ok=True)
             torch.save(embeddings, label_embedding_path)
 
-        # Free model and other data
-        model.to('cpu')
-        del model, inputs, outputs
-        torch.cuda.empty_cache()
-        gc.collect()
+        model.unload_model()
 
     feature_similarity = torch.mm(embeddings, embeddings.t())
     norm = torch.norm(feature_similarity, 2, 1, keepdim=True).add(1e-8)
@@ -312,35 +296,69 @@ def generate_similarities(model_path, pseudo_samples, label_embedding_path=None)
     return feature_similarity
 
 
-class DMASampler(NodeSampler):
-    def __init__(self, model_path, prompt_template, pseudo_sample_dir=None, label_embedding_dir=None, n=None):
-        super().__init__(n, 'dma_sampler')
+@register_component('dma_sampler')
+class DMASampler(Component):
+    def __init__(
+            self, 
+            prompt_template,
+            model=None, 
+            model_path=None, 
+            n=None,
+            node_type='documents',
+            mask_name='to_label',
+            label_attribute='pseudo_y',
+            graph_embedding_attribute='x',
+            pseudo_sample_cache_dir=None, 
+            label_embedding_cache_dir=None,
+        ):
+        assert model or model_path, 'Either pass a model or a model path'
 
-        model_name = model_path.split('.')[-1]
-        pseudo_sample_path =  f'{pseudo_sample_dir}/{model_name}.json'
-        label_embedding_path =  f'{label_embedding_dir}/{model_name}.pt'
-        self.pseudo_sample_path = pseudo_sample_path
-        self.label_embedding_path = label_embedding_path
+        if model:
+            self.model = model
+            model_path = model.model_name
+        else:
+            self.model = LLM(model_path)
+
         self.model_path = model_path
         self.prompt_template = prompt_template
+        self.n = n
+        self.node_type = node_type
+        self.mask_name = mask_name
+        self.label_attribute = label_attribute
+        self.graph_embedding_attribute = graph_embedding_attribute
 
-        if pseudo_sample_path: self.str_parameters['pseudo_sample_path'] = pseudo_sample_path
-        if label_embedding_path: self.str_parameters['label_embedding_path'] = label_embedding_path
+        sanitized_model_path = model_path.replace('/', '--')
+        self.pseudo_sample_cache_path = f'{pseudo_sample_cache_dir}/{sanitized_model_path}.json' if pseudo_sample_cache_dir is not None else None
+        self.label_embedding_cache_path = f'{label_embedding_cache_dir}/{sanitized_model_path}.pt' if label_embedding_cache_dir is not None else None
+
+        self.str_parameters = {
+            'model_path': model_path,
+            'n': n,
+            'mask_name': mask_name,
+            'label_attribute': label_attribute,
+            'graph_embedding_attribute': graph_embedding_attribute
+        }
+
+        if self.pseudo_sample_cache_path:
+            self.str_parameters['pseudo_sample_cache_path'] = self.pseudo_sample_cache_path
+
+        if self.label_embedding_cache_path:
+            self.str_parameters['label_embedding_cache_path'] = self.label_embedding_cache_path
     
-    def sample_nodes(self, data, n=None):
-        n = n or self.n
+    def sample_nodes(self, data, context):
+        n = self.n
         if isinstance(n, float):
             n = int(data.num_nodes*n)
 
-        categories = list(data.label2id.keys())
+        categories = list(context['classes'].keys())
 
         # Generate pseudo_samples
-        pseudo_samples = generate_pseudo_samples(self.model_path, self.prompt_template, categories, self.pseudo_sample_path)
+        pseudo_samples = generate_pseudo_samples(self.model, self.prompt_template, categories, self.pseudo_sample_cache_path)
         # Extract embeddings and compute similarities between representations
-        label_similarities = generate_similarities(self.model_path, pseudo_samples, self.label_embedding_path)
+        label_similarities = generate_similarities(self.model, pseudo_samples, self.label_embedding_cache_path)
 
-        features = data.x
-        labels = data.y if hasattr(data, 'y') else torch.full((data.num_nodes,), -1)
+        features = data[self.graph_embedding_attribute]
+        labels = data[self.label_attribute] if hasattr(data, self.label_attribute) else torch.full((data.num_nodes,), -1)
         edge_index = data.edge_index
         total_node_number = data.num_nodes
         available_nodes = labels != -1
@@ -348,28 +366,22 @@ class DMASampler(NodeSampler):
 
         return sample_mask
     
-    def forward(self, data, *args, n=None, **kwargs):
-        data = data.clone()
-
-        sample_mask = self.sample_nodes(data, n)
-
-        data.sample_mask = sample_mask
-
-        print(len(sample_mask.nonzero().flatten()))
-
-        return data
-    
-    @classmethod
-    def from_config(cls, params, *args, extra_config={}, **kwargs):
-        print(kwargs)
-        prompt_template = params['prompt_template']
-        if isinstance(prompt_template, dict):
-            # keys_list = prompt_template['source'].split('.')
-            # template = get_nested_value(extra_config, keys_list)
-            template = ('{' + prompt_template["source"] + '}').format(**extra_config)
-            params['prompt_template'] = template
-
-        params['label_embedding_dir'] = params['label_embedding_dir'].format(**extra_config)
-        params['pseudo_sample_dir'] = params['pseudo_sample_dir'].format(**extra_config)
+    def run(self, context):
+        data = context['graph']
         
-        return super().from_config(params, **kwargs)
+        if self.node_type not in context['node_types']:
+            raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
+        
+        type_data = data[self.node_type] if isinstance(data, HeteroData) else data
+
+        sample_mask = self.sample_nodes(type_data, context)
+
+        print(f'Sampled {sample_mask.sum()} nodes with DMA')
+
+        if context.get(self.mask_name) is None:
+            context[self.mask_name] = sample_mask
+
+        else:
+            context[self.mask_name] = context[self.mask_name] | sample_mask
+
+        return context

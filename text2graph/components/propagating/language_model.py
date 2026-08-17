@@ -1,12 +1,15 @@
-from .propagating import LabelPropagator
+from ..component import Component
+from ..component_registry import register_component
 
 import torch
 
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from datasets import Dataset
+from torch_geometric.data import HeteroData
 
 
-class LMPropagator(LabelPropagator):
+@register_component('lm_propagator')
+class LMPropagator(Component):
     def __init__(
         self,
         model_path,
@@ -15,17 +18,31 @@ class LMPropagator(LabelPropagator):
         patience=None,
         batch_size=16,
         max_length=128,
+        node_type='documents',
+        label_attribute='pseudo_y'
     ):
-        super().__init__("lm_propagator")
         self.model_path = model_path
         self.epochs = epochs
         self.lr = lr
         self.patience = patience
         self.batch_size = batch_size
         self.max_length = max_length
+        self.node_type = node_type
+        self.label_attribute = label_attribute
+
+        self.str_parameters = {
+            'model_path': model_path,
+            'epochs': epochs,
+            'lr': lr,
+            'patience': patience,
+            'batch_size': batch_size,
+            'max_length': max_length,
+            'node_type': node_type,
+            'label_attribute': label_attribute
+        }
 
     def propagate(self, data, train_mask):
-        unique_labels,new_labels = torch.unique(data.y[train_mask], sorted=True, return_inverse=True)
+        unique_labels, new_labels = torch.unique(data[self.label_attribute][train_mask], sorted=True, return_inverse=True)
 
         num_classes = len(unique_labels)
 
@@ -84,19 +101,24 @@ class LMPropagator(LabelPropagator):
 
         return preds, probs
 
-    def forward(self, data, *args, **kwargs):
-        data = data.clone()
+    def run(self, context):
+        data = context['graph']
+        
+        if self.node_type not in context['node_types']:
+            raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
+        
+        type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        train_mask = data.y != -1
-        unlabeled_node_ids = torch.arange(data.num_nodes)[~train_mask]
+        train_mask = type_data[self.label_attribute] != -1
+        unlabeled_node_ids = torch.arange(type_data.num_nodes)[~train_mask]
 
-        preds, probs = self.propagate(data, train_mask)
+        preds, probs = self.propagate(type_data, train_mask)
 
-        if not data.get('label_info'):
-            data.label_info = [{} for _ in range(data.num_nodes)]
+        if not context.get('label_info'):
+            context['label_info'] = [{} for _ in range(context.num_nodes)]
 
         for node_id,pred,prob in zip(unlabeled_node_ids, preds[~train_mask], probs[~train_mask]):
-            data.label_info[node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
-            data.y[node_id] = pred
+            type_data['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
+            type_data[self.label_attribute][node_id] = pred
 
-        return data
+        return context

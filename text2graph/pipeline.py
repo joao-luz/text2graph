@@ -1,56 +1,81 @@
-from .components import component_from_config
-from .components.visualizing import GraphVisualizer
-
-import torch
-
-from torch_geometric.data import Data
+from .components import RepeatComponent
+from .components.component_registry import COMPONENTS
 
 
-def load_steps_from_config(config, **kwargs):
+def resolve_str_to_object(str, context):
+    from string import Formatter
+
+    clean_path = str.strip('${}')
+    
+    formatter = Formatter()
+    try:
+        obj, _ = formatter.get_field(clean_path, (), context)
+        return obj
+    except (KeyError, IndexError, AttributeError):
+        return None
+
+
+def is_obj_str(str):
+    return str.startswith('${') and str.endswith('}')
+
+
+def load_component_from_config(component_config, context):
+    name = component_config['name']
+    cls = COMPONENTS[name]
+
+    if cls == RepeatComponent:
+        parameters = component_config.get('parameters') or {}
+        steps = parameters.get('steps') or {}
+        parameters['steps'] = load_steps_from_config(steps, context)
+
+    else:
+        parameters = component_config.get('parameters') or {}
+        for param,val in parameters.items():
+            if isinstance(val, str):
+                if is_obj_str(val):
+                    parameters[param] = resolve_str_to_object(val, context)
+                else:
+                    parameters[param] = val.format(**context)
+
+    component = cls(**parameters)
+
+    return component
+
+
+def load_steps_from_config(component_configs, context):
     steps = []
-    for component_config in config['pipeline']['components']:
-        component = component_from_config(component_config, **kwargs)
+
+    for component_config in component_configs:
+        component = load_component_from_config(component_config, context)
         steps.append(component)
 
     return steps
 
 
-class Text2Graph:
-    def __init__(self, steps=None, config=None, name='', skip_visualization=False, output_dir='.', **kwargs):
-        assert steps or config, 'Either pass the pipeline steps or a config dict'
+class Pipeline:
+    def __init__(self, steps=None, config=None, verbose=True, **context_kwargs):
+        assert (steps is not None) ^ (config is not None), 'Either pass a list of steps for the pipeline or a config dict.'
 
-        self.name = name
-        self.skip_visualization = skip_visualization
+        self.steps = steps
+        self.context = context_kwargs
+        self.verbose = verbose
 
-        if steps:
-            self.steps = steps
-        else:
-            self.steps = load_steps_from_config(config, **kwargs)
+        if config is not None:
+            self.steps = load_steps_from_config(config['steps'], self.context)
 
-        self.output_dir = output_dir
-    
-    def _build_data(self, texts, true_labels=None, id2label=None):
-        label2id = {v: k for k,v in id2label.items()}
-        data = Data(text=texts, true_label=torch.tensor(true_labels), label2id=label2id, id2label=id2label, num_nodes=len(texts))
-
-        return data
-    
     def __str__(self):
-        return 'Text2Graph(steps=[\n\t' + ',\n\t'.join([str(step) for step in self.steps]) + '\n])'
-    
-    def __call__(self, texts, true_labels=None, id2label=None, dataset_config=None, **kwargs):
-        data = self._build_data(texts, true_labels, id2label)
+        steps_str = '\n'.join(['\t' + line for line in ',\n'.join([str(step) for step in self.steps]).split('\n')])
+        return 'Pipeline(steps=[\n' + steps_str + '\n])'
+
+    def run(self, **context_kwargs):
+        self.context |= context_kwargs
 
         for step in self.steps:
-            if isinstance(step, GraphVisualizer):
-                if self.skip_visualization:
-                    continue
+            if isinstance(step, RepeatComponent):
+                step.verbose = self.verbose
                 
-                step.set_output_dir(self.output_dir)
+            if self.verbose:
+                print(str(step) + '...')
+            self.context = step(self.context)
 
-            string = str(step)
-
-            print(f'Running {string}...')
-            data = step(data, dataset_config=dataset_config, **kwargs)
-
-        return data
+        return self.context

@@ -1,4 +1,6 @@
-from .sentence_embedding_extractor import SentenceEmbedding
+from .sentence_embedding import SentenceEmbeddingExtractor
 
 
-__all__ = ['SentenceEmbedding']
+__all__ = [
+    'SentenceEmbeddingExtractor'
+]

@@ -1,32 +1,47 @@
-from .sampling import NodeSampler
+from ..component import Component
+from ..component_registry import register_component
 
 import torch
+
+from torch_geometric.data import HeteroData
 from torch_geometric.utils import degree
 
-class DegreeSampler(NodeSampler):
-    def __init__(self, n):
-        super().__init__(n, 'degree_sampler')
 
-    def sample_nodes(self, data, n=None):
+@register_component('degree_sampler')
+class DegreeSampler(Component):
+    def __init__(self, n=100, node_type='documents', mask_name='to_label'):
+        self.n = n
+        self.node_type = node_type
+        self.mask_name = mask_name
+
+        self.str_parameters = {
+            'n': n,
+            'node_type': node_type,
+            'mask_name': mask_name,
+        }
+
+    def sample_nodes(self, data):
         n = n or self.n
         if isinstance(n, float):
             n = int(data.num_nodes*n)
 
         degrees = degree(data.edge_index, data.num_nodes)
         _,indices = torch.sort(degrees, descending=True)
-        nodes = indices[:n]
 
-        sample_mask = torch.zeros(data.num_nodes)
-        sample_mask[nodes] = True
+        return indices
 
-        return sample_mask
-    
-    def forward(self, data, *args, n=None, **kwargs):
-        data = data.clone()
+    def run(self, context):
+        data = context['graph']
 
-        sample_mask = self.sample_nodes(data, n)
-
-        data.sample_mask = sample_mask
-
-        return data
+        if self.node_type not in context['node_types']:
+            raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
         
+        type_data = data[self.node_type] if isinstance(data, HeteroData) else data
+
+        sampled_indices = self.sample_nodes(data)
+        mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
+        mask[sampled_indices] = True
+
+        context[self.mask_name] = mask
+
+        return context
