@@ -111,6 +111,39 @@ def update_reliability_single_node(reliability_score, num_node, node, adj_vec, l
         visited[n] = 1.0
 
 
+def update_reliability(labels_sim, adj_matrix2, idx_used, labels, num_node, reliability_list, oracle_acc, similarity_feature, th, is_first=None):
+    alpha = oracle_acc
+    visited = torch.zeros(num_node)
+    if is_first:
+        reliability_list[idx_used] = alpha
+
+    num_class = len(labels_sim)
+    sim_label = []
+    sim_label_cor = 0.
+    for i in range(num_class):
+        sim_label.append(
+            (sum(labels_sim[i])-labels_sim[i][i])/(num_class-1))
+        sim_label_cor += labels_sim[i][i]
+    sim_label_cor /= num_class
+    sim_label = torch.tensor(sim_label, dtype=torch.float32)
+
+    cur_similarity_feature = torch.mm(similarity_feature[idx_used], similarity_feature.t())
+    dis_range = torch.max(cur_similarity_feature) - torch.min(cur_similarity_feature)
+    cur_similarity_feature = (cur_similarity_feature -
+                          torch.min(cur_similarity_feature))/dis_range
+
+    for i, node in enumerate(idx_used):
+        idx_used_mask = torch.zeros(num_node)
+        idx_used_mask[idx_used] = 1
+
+        update_reliability_single_node(reliability_list, num_node, node, adj_matrix2[node].to_dense(), labels, idx_used_mask, 
+                                       cur_similarity_feature[i], labels_sim, sim_label, num_class, visited)
+
+    # normalize the realiability list
+    dis_range = torch.max(reliability_list) - torch.min(reliability_list)
+    reliability_list = (reliability_list - torch.min(reliability_list))/dis_range
+
+
 def compute_rw_norm_edge_index(edge_index, edge_weight=None, num_nodes=None):
     edge_index, edge_weight = remove_self_loops(edge_index, edge_weight)
 
@@ -172,85 +205,78 @@ def compute_sim(norm_aax, num_nodes):
     return similarity_feature
 
 
-def update_reliability(labels_sim, adj_matrix2, idx_used, labels, num_node, reliability_list, oracle_acc, similarity_feature, th, is_first=None):
-    alpha = oracle_acc
-    visited = torch.zeros(num_node)
-    if is_first:
-        reliability_list[idx_used] = alpha
+# Adapted from original code. We only process one batch at a time for DMA, and let the
+# iterations be controlled externally (e.g. by the RepeatComponent component)
+def dma(
+        features,
+        edge_index,
+        total_node_number,
+        labels_sim,
+        reliability_list=None,
+        activated_nodes=None,
+        labels=None,
+        batch_budget=140,
+        oracle_acc=1,
+        th=0.05
+    ):   
+    reliability_list = reliability_list if reliability_list is not None else torch.ones(total_node_number)
+    activated_nodes = activated_nodes if activated_nodes is not None else torch.ones(total_node_number)
 
-    num_class = len(labels_sim)
-    sim_label = []
-    sim_label_cor = 0.
-    for i in range(num_class):
-        sim_label.append(
-            (sum(labels_sim[i])-labels_sim[i][i])/(num_class-1))
-        sim_label_cor += labels_sim[i][i]
-    sim_label_cor /= num_class
-    sim_label = torch.tensor(sim_label, dtype=torch.float32)
-
-    cur_similarity_feature = torch.mm(similarity_feature[idx_used], similarity_feature.t())
-    dis_range = torch.max(cur_similarity_feature) - torch.min(cur_similarity_feature)
-    cur_similarity_feature = (cur_similarity_feature -
-                          torch.min(cur_similarity_feature))/dis_range
-
-    for i, node in enumerate(idx_used):
-        idx_used_mask = torch.zeros(num_node)
-        idx_used_mask[idx_used] = 1
-
-        update_reliability_single_node(reliability_list, num_node, node, adj_matrix2[node].to_dense(), labels, idx_used_mask, 
-                                       cur_similarity_feature[i], labels_sim, sim_label, num_class, visited)
-
-    # normalize the realiability list
-    dis_range = torch.max(reliability_list) - torch.min(reliability_list)
-    reliability_list = (reliability_list -
-                            torch.min(reliability_list))/dis_range
-
-
-def dma(features, labels, edge_index, total_node_number, labels_sim, idx_avilable, total_budget=140, oracle_acc=1, th=0.05, batch_size=5):   
-    reliability_list = torch.ones(total_node_number)
-    all_idx = torch.arange(total_node_number)
     adj_matrix2 = compute_adj2(edge_index, total_node_number)
     adj_rowptr, adj_col, adj_value = adj_matrix2.csr()
     norm_aax = compute_norm_aax(features, edge_index, total_node_number)
     similarity_feature = norm_aax
 
-    idx_train = []
-    idx_available = all_idx[idx_avilable].tolist()
-    idx_available_temp = copy.deepcopy(idx_available)
-    activated_node = torch.ones(total_node_number)
+    selected_indices = []
+    to_label = []
+
+    # Available indices are the ones that haven't been labeled yet
+    already_labeled_mask = labels > -1 if labels is not None else torch.zeros(total_node_number, dtype=torch.bool)
+    idx_available = torch.arange(total_node_number)[~already_labeled_mask].tolist()
+
     count = 0
-    iter = 0
-    train_class = {}
+    is_first = already_labeled_mask.sum() == 0
 
-    while True:
+    for count in range(batch_budget):
         max_ral_node, max_activated_node, max_activated_num = get_max_reliable_influ_node(
-            torch.tensor(idx_available_temp), activated_node, reliability_list, th, adj_rowptr, adj_col, adj_value, is_first=(iter == 0))
+            torch.tensor(idx_available), 
+            activated_nodes, 
+            reliability_list, 
+            th, 
+            adj_rowptr, 
+            adj_col, 
+            adj_value, 
+            is_first=is_first
+        )
 
-        idx_train.append(max_ral_node)
-        idx_available_temp.remove(max_ral_node)
-        node_label = labels[max_ral_node].item()
-        if node_label in train_class:
-            train_class[node_label].append(max_ral_node)
-        else:
-            train_class[node_label] = list()
-            train_class[node_label].append(max_ral_node)
+        selected_indices.append(max_ral_node)
+        to_label.append(max_ral_node)
+        idx_available.remove(max_ral_node)
         count += 1
 
-        activated_node = activated_node - max_activated_node
-        activated_node = torch.clamp(activated_node, min=0)
+        activated_nodes = activated_nodes - max_activated_node
+        activated_nodes = torch.clamp(activated_nodes, min=0)
 
-        if count % batch_size == 0:
-            update_reliability(labels_sim, adj_matrix2.to_dense(), idx_train, labels, total_node_number,
-                                                reliability_list, oracle_acc, similarity_feature, th, is_first=(iter == 0))
-            iter += 1
-
-        if count >= total_budget or max_activated_num <= 0:
+        if max_activated_num <= 0:
             break
 
-    train_mask = torch.zeros(total_node_number)
-    train_mask[idx_train] = 1
+    update_reliability(
+        labels_sim, 
+        adj_matrix2.to_dense(), 
+        selected_indices, 
+        labels, 
+        total_node_number,
+        reliability_list, 
+        oracle_acc, 
+        similarity_feature, 
+        th, 
+        is_first=is_first
+    )
 
-    return train_mask.bool()
+    train_mask = torch.zeros(total_node_number)
+    train_mask[selected_indices] = 1
+
+    return train_mask.bool(), reliability_list, activated_nodes
 
 
 def generate_pseudo_samples(model, prompt_template, categories, pseudo_sample_path=None, temperature=0.7):
@@ -309,7 +335,7 @@ class DMASampler(Component):
             label_attribute='pseudo_y',
             graph_embedding_attribute='x',
             pseudo_sample_cache_dir=None, 
-            label_embedding_cache_dir=None,
+            label_embedding_cache_dir=None
         ):
         assert model or model_path, 'Either pass a model or a model path'
 
@@ -361,10 +387,22 @@ class DMASampler(Component):
         labels = data[self.label_attribute] if hasattr(data, self.label_attribute) else torch.full((data.num_nodes,), -1)
         edge_index = data.edge_index
         total_node_number = data.num_nodes
-        available_nodes = labels != -1
-        sample_mask = dma(features, labels, edge_index, total_node_number, label_similarities, available_nodes, total_budget=n)
 
-        return sample_mask
+        reliability_list = context.get('dma_reliability_list')
+        activated_nodes = context.get('dma_activated_nodes')
+
+        sample_mask, reliability_list, activated_nodes = dma(
+            features,
+            edge_index,
+            total_node_number,
+            label_similarities,
+            reliability_list=reliability_list,
+            activated_nodes=activated_nodes,
+            labels=labels,
+            batch_budget=n
+        )
+
+        return sample_mask, reliability_list, activated_nodes
     
     def run(self, context):
         data = context['graph']
@@ -374,9 +412,10 @@ class DMASampler(Component):
         
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        sample_mask = self.sample_nodes(type_data, context)
+        sample_mask, reliability_list, activated_nodes = self.sample_nodes(type_data, context)
 
-        print(f'Sampled {sample_mask.sum()} nodes with DMA')
+        context['dma_reliability_list'] = reliability_list
+        context['dma_activated_nodes'] = activated_nodes
 
         if context.get(self.mask_name) is None:
             context[self.mask_name] = sample_mask
