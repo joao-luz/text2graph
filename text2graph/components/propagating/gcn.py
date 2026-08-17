@@ -39,7 +39,7 @@ class GCNPropagator(Component):
         }
 
     def propagate(self, data, train_mask):
-        unique_labels, new_labels = torch.unique(data.y[train_mask], sorted=True, return_inverse=True)
+        unique_labels, new_labels = torch.unique(data[self.label_attribute][train_mask], sorted=True, return_inverse=True)
 
         num_classes = len(unique_labels)
 
@@ -91,8 +91,11 @@ class GCNPropagator(Component):
         
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        train_mask = type_data.y != -1
+        train_mask = type_data[self.label_attribute] != -1
         unlabeled_node_ids = torch.arange(type_data.num_nodes)[~train_mask]
+
+        print(f'{train_mask.sum()} nodes with pseudo-labels')
+        print(f'{data[self.label_attribute][train_mask].unique(return_counts=True)}')
 
         preds, probs = self.propagate(type_data, train_mask)
 
@@ -100,7 +103,7 @@ class GCNPropagator(Component):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
         for node_id,pred,prob in zip(unlabeled_node_ids, preds[~train_mask], probs[~train_mask]):
-            context.label_info[node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
+            context['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
             type_data[self.label_attribute][node_id] = pred
         
         return context
