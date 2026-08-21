@@ -15,7 +15,7 @@ class SentenceEmbeddingExtractor(Component):
             model=None, 
             model_path=None, 
             graph_embedding_attribute='x',
-            texts_attribute='documents', 
+            texts_attribute='text', 
             prompt=None,
             node_types=['documents'],
             unload_model=True
@@ -61,7 +61,7 @@ class SentenceEmbeddingExtractor(Component):
             else:
                 type_data = data
 
-            type_data[self.graph_embedding_attribute] = self.compute_representations(context[self.texts_attribute])
+            type_data[self.graph_embedding_attribute] = self.compute_representations(type_data[self.texts_attribute])
 
         if self.unload_model:
             del self.model
