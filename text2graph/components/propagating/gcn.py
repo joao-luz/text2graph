@@ -18,7 +18,8 @@ class GCNPropagator(Component):
             lr=1e-3, 
             node_type='documents', 
             label_attribute='pseudo_y',
-            graph_embedding_attribute='x'
+            graph_embedding_attribute='x',
+            propagating_mask=None
         ):
         self.hidden_channels = hidden_channels
         self.epochs = epochs
@@ -27,6 +28,7 @@ class GCNPropagator(Component):
         self.node_type = node_type
         self.label_attribute = label_attribute
         self.graph_embedding_attribute = graph_embedding_attribute
+        self.propagating_mask = propagating_mask
 
         self.str_parameters = {
             'hidden_channels': hidden_channels,
@@ -56,7 +58,7 @@ class GCNPropagator(Component):
             model.train()
             optimizer.zero_grad()
 
-            out = model(data[self.graph_embedding_attribute], data.edge_index, data.edge_weight)
+            out = model(data[self.graph_embedding_attribute], data.edge_index)
             loss = F.cross_entropy(out[train_mask], new_labels)
 
             if self.patience is not None and curr_patience == self.patience:
@@ -77,7 +79,7 @@ class GCNPropagator(Component):
 
         model.eval()
         with torch.no_grad():
-            out = model(data[self.graph_embedding_attribute], data.edge_index, data.edge_weight)
+            out = model(data[self.graph_embedding_attribute], data.edge_index)
             probs, preds = torch.softmax(out, 1).max(dim=1)
             preds = unique_labels[preds]
 
@@ -95,14 +97,16 @@ class GCNPropagator(Component):
         unlabeled_node_ids = torch.arange(type_data.num_nodes)[~train_mask]
 
         print(f'{train_mask.sum()} nodes with pseudo-labels')
-        print(f'{data[self.label_attribute][train_mask].unique(return_counts=True)}')
+        print(f'{type_data[self.label_attribute][train_mask].unique(return_counts=True)}')
 
         preds, probs = self.propagate(type_data, train_mask)
 
         if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
-        for node_id,pred,prob in zip(unlabeled_node_ids, preds[~train_mask], probs[~train_mask]):
+        propagating_mask = self.propagating_mask if self.propagating_mask is not None else torch.ones(type_data.num_nodes, dtype=torch.bool) 
+        propagating_mask = (propagating_mask & (~train_mask))
+        for node_id,pred,prob in zip(unlabeled_node_ids, preds[propagating_mask], probs[propagating_mask]):
             context['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
             type_data[self.label_attribute][node_id] = pred
         

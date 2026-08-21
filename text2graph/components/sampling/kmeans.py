@@ -22,11 +22,12 @@ def kmeans_sample(embeddings, k):
 
 @register_component('kmeans_sampler')
 class KMeansSampler(Component):
-    def __init__(self, n=100, node_type='documents', representation_attr='x', mask_name='to_label'):
+    def __init__(self, n=100, node_type='documents', representation_attr='x', mask_name='to_label', label_attribute='pseudo_y'):
         self.node_type = node_type
         self.representation_attr = representation_attr
         self.n = n
         self.mask_name = mask_name
+        self.label_attribute = label_attribute
 
         self.str_parameters = {
             'n': n,
@@ -43,7 +44,14 @@ class KMeansSampler(Component):
         
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        embeddings = type_data[self.representation_attr]
+        if type_data.get(self.label_attribute) is not None:
+            mask = type_data[self.label_attribute] == -1
+        else:
+            mask = torch.ones(type_data.num_nodes, dtype=torch.bool)
+
+        embeddings = type_data[self.representation_attr][mask]
+
+        print(type_data.num_nodes)
 
         sampled_indices = kmeans_sample(embeddings, self.n)
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)

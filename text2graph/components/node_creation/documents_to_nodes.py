@@ -1,5 +1,6 @@
 from ..component import Component
 from ..component_registry import register_component
+from ...utils import data_to_hetero
 
 import torch
 from torch_geometric.data import Data, HeteroData
@@ -35,7 +36,7 @@ class DocumentsToNodes(Component):
 
         elif isinstance(graph, Data):
             existing_node_type = context['node_types'][0]
-            graph = self._data_to_hetero(graph, node_type=existing_node_type)
+            graph = data_to_hetero(graph, node_type=existing_node_type)
             node_store = graph[self.node_type]
             context['node_types'].append(self.node_type)
 
@@ -62,28 +63,3 @@ class DocumentsToNodes(Component):
         context['graph'] = graph
         
         return context
-
-    @staticmethod
-    def _data_to_hetero(data, node_type='documents'):
-        hetero = HeteroData()
-
-        node_store = hetero[node_type]
-
-        for key, value in data.items():
-            if key in {'edge_index', 'edge_attr', 'edge_weight'}:
-                continue
-
-            node_store[key] = value
-
-        if data.edge_index is not None:
-            edge_type = (node_type, 'to', node_type)
-
-            hetero[edge_type].edge_index = data.edge_index
-
-            if getattr(data, 'edge_attr', None) is not None:
-                hetero[edge_type].edge_attr = data.edge_attr
-
-            if getattr(data, 'edge_weight', None) is not None:
-                hetero[edge_type].edge_weight = data.edge_weight
-
-        return hetero

@@ -8,7 +8,7 @@ from torch_geometric.data import HeteroData
 
 @register_component('ground_truth_labeler')
 class GroundTruthLabeler(Component):
-    def __init__(self, sample_mask_name='to_label', node_type='documents', true_label_source='y', label_attribute='pseudo_y'):
+    def __init__(self, sample_mask_name='to_label', node_type='documents', true_label_source='labels', label_attribute='pseudo_y'):
         super().__init__()
 
         self.sample_mask_name = sample_mask_name

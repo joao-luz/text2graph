@@ -20,13 +20,11 @@ class RandomSampler(Component):
             'mask_name': mask_name,
         }
 
-    def sample_nodes(self, data):
-        data = data.clone()
-        
-        indices = random.sample(range(data.num_nodes), k=self.n)
-        indices = torch.tensor(indices)
+    def sample_nodes(self, indices):        
+        shuffled_indices = torch.randperm(len(indices))
+        sampled_indices = indices[shuffled_indices[:self.n]]
 
-        return indices
+        return sampled_indices
 
     def run(self, context):
         data = context['graph']
@@ -36,7 +34,14 @@ class RandomSampler(Component):
         
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        sampled_indices = self.sample_nodes(data)
+        if type_data.get(self.label_attribute) is not None:
+            mask = type_data[self.label_attribute] == -1
+        else:
+            mask = torch.ones(type_data.num_nodes, dtype=torch.bool)
+
+        indices = torch.tensor(type_data.num_nodes)[mask]
+
+        sampled_indices = self.sample_nodes(indices)
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
         mask[sampled_indices] = True
 

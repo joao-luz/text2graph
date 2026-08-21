@@ -20,15 +20,17 @@ class DegreeSampler(Component):
             'mask_name': mask_name,
         }
 
-    def sample_nodes(self, data):
-        n = n or self.n
+    def sample_nodes(self, data, mask):
+        n = self.n
         if isinstance(n, float):
             n = int(data.num_nodes*n)
 
         degrees = degree(data.edge_index, data.num_nodes)
         _,indices = torch.sort(degrees, descending=True)
 
-        return indices
+        sampled_indices = indices[mask[indices]]
+
+        return sampled_indices
 
     def run(self, context):
         data = context['graph']
@@ -37,6 +39,11 @@ class DegreeSampler(Component):
             raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
         
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
+
+        if type_data.get(self.label_attribute) is not None:
+            mask = type_data[self.label_attribute] == -1
+        else:
+            mask = torch.ones(type_data.num_nodes, dtype=torch.bool)
 
         sampled_indices = self.sample_nodes(data)
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
