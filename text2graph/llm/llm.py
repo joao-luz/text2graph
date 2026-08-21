@@ -12,7 +12,7 @@ class LLM():
         self.loaded = False
         self.model = None
         self.default_chat_kwargs = {}
-        self.default_vllm_args = {'max_model_len': 4096, 'gpu_memory_utilization': 0.7} | vllm_args
+        self.default_vllm_args = {'max_model_len': 4096, 'gpu_memory_utilization': 0.8} | vllm_args
 
         if load_model:
             self.load_model(**vllm_args)

@@ -1,22 +1,46 @@
-class LLMEnsembleLabeler(Labeler):
-    def __init__(self, 
+from ..component import Component
+from ..component_registry import register_component
+from ...llm import LLM
+
+import regex as re
+import torch
+import torch.nn.functional as F
+
+from torch_geometric.data import Data, HeteroData
+
+
+@register_component('llm_ensemble_labeler')
+class LLMEnsembleLabeler(Component):
+    def __init__(self,
         prompt_template,
-        model_paths,
-        sample_mask_attribute='sample_mask',
-        resolver='majority_vote', 
+        label_map,
+        models=None,
+        model_paths=None,
+        mask_name='to_label',
+        node_type='documents',
+        label_attribute='pseudo_y',
+        resolver='majority_vote',
         threshold=None,
         concatenate_decisions_to_x=None,
-        decision_features_attribute=None, 
-        input_builder=None, 
-        response_parser=None, 
-        parser_args={}, 
-        temperature=0.0
+        decision_features_attribute=None,
+        input_builder=None,
+        response_parser=None,
+        parser_args={},
+        temperature=0.0,
+        unload_model=True
     ):
-        super().__init__(f'llm_ensemble_labeler', sample_mask_attribute)
+        assert model_paths is not None or models is not None, 'Either pass a list of models or model paths'
 
-        self.model_paths = model_paths
+        if models is not None:
+            self.models = models
+            self.model_paths = [model.model.name for model in models]
 
-        def default_input_builder(data, node_id, cap=1200):
+        else:
+            self.model_paths = model_paths
+            self.models = [LLM(path) for path in model_paths]
+        
+        def default_input_builder(context, node_type, node_id, cap=1200):
+            data = context['graph'] if isinstance(context['graph'], Data) else context['graph'][node_type]
             text = data.text[node_id]
             index = sum(len(token) for token in text.split()[:cap]) + cap
             text = text[:index]
@@ -30,33 +54,42 @@ class LLMEnsembleLabeler(Labeler):
             if option >= len(options):
                 option = 0
 
-            return options[option]
-        
+            return option
+
         self.threshold = threshold
         def majority_vote_resolver(decisions, threshold=threshold):
             votes = torch.stack(list(decisions.values()))
-            majority_votes,_ = torch.mode(votes, dim=0)
-            probs = torch.sum(votes == majority_votes, dim=0)/votes.shape[0]
+            majority_votes, _ = torch.mode(votes, dim=0)
+            probs = torch.sum(votes == majority_votes, dim=0) / votes.shape[0]
 
             if threshold:
                 majority_votes[probs < threshold] = -1
 
             return majority_votes, probs
 
-        if resolver == 'majority_vote':
-            self.resolver = majority_vote_resolver
+        self.resolver = majority_vote_resolver if resolver == 'majority_vote' else resolver
 
         self.decision_features_attribute = decision_features_attribute
         self.concatenate_decisions_to_x = concatenate_decisions_to_x
         self.prompt_template = prompt_template
+        self.label_map = label_map
+        self.mask_name = mask_name
+        self.node_type = node_type
+        self.label_attribute = label_attribute
         self.input_builder = input_builder or default_input_builder
         self.response_parser = response_parser or default_parser
         self.parser_args = parser_args
         self.temperature = temperature
+        self.unload_model = unload_model
 
         self.str_parameters = {
             'models': self.model_paths,
-            'resolver': self.resolver
+            'mask_name': mask_name,
+            'node_type': node_type,
+            'label_attribute': label_attribute,
+            'resolver': resolver,
+            'threshold': threshold,
+            'temperature': temperature
         }
 
     def set_prompt_template(self, new_template):
@@ -65,94 +98,72 @@ class LLMEnsembleLabeler(Labeler):
     def set_parser_args(self, new_args):
         self.parser_args = new_args
 
-    def extract_labels(self, data, node_ids):
-        inputs = [self.input_builder(data, node_id) for node_id in node_ids]
+    def extract_labels(self, context, type_data, node_ids):
+        inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
         prompts = [self.prompt_template.format(**input) for input in inputs]
 
         decisions = {}
-        for model_path in self.model_paths:
+        for model,model_path in zip(self.models, self.model_paths):
             print(f'Voting with {model_path}...')
 
-            model = LLM(model_path)
-            outputs = model.query(prompts, self.temperature)
-            del model
-
+            outputs = model.invoke(prompts, self.temperature)
             parsed = [self.response_parser(output, **self.parser_args) for output in outputs]
 
-            decisions[model_path] = torch.tensor([data.label2id[p] for p in parsed])
+            decisions[model_path] = torch.tensor(parsed)
 
-        preds,probs = self.resolver(decisions)
+            if self.unload_model:
+                model.unload_model()
+            del model
 
-        preds_full = torch.full((data.num_nodes, ), -1)
-        probs_full = torch.zeros((data.num_nodes, ))
-        for i,node_id in enumerate(node_ids):
+        preds, probs = self.resolver(decisions)
+
+        preds_full = torch.full((type_data.num_nodes, ), -1)
+        probs_full = torch.zeros((type_data.num_nodes, ))
+        for i, node_id in enumerate(node_ids):
             preds_full[node_id] = preds[i]
             probs_full[node_id] = probs[i]
 
-        if not any(preds_full != -1):
+        if not torch.any(preds_full != -1):
             raise ValueError(f'No nodes labeled with at least {self.threshold:.2f} agreement between ensemble models.')
 
-        for model in self.model_paths:
-            decisions_full = torch.full((data.num_nodes, ), -1)
+        decisions_full = {}
+        for model_path in self.model_paths:
+            full = torch.full((type_data.num_nodes, ), -1)
+            for i, node_id in enumerate(node_ids):
+                full[node_id] = decisions[model_path][i]
+            decisions_full[model_path] = full
 
-            for i,node_id in enumerate(node_ids):
-                decisions_full[node_id] = decisions[model][i]
-            
-            decisions[model] = decisions_full
+        return preds_full, probs_full, decisions_full
 
-        def one_hot_with_ignore(labels, num_classes, ignore_index):
-            valid_mask = (labels != ignore_index).unsqueeze(-1)
+    def run(self, context):
+        data = context['graph']
 
-            processed_labels = labels.clone()
-            processed_labels[labels == ignore_index] = 0
+        if self.node_type not in context['node_types']:
+            raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
 
-            one_hot = F.one_hot(processed_labels, num_classes=num_classes).float()
-            one_hot = one_hot * valid_mask.float()
-            
-            return one_hot
+        type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
-        decisions_stacked = torch.stack(list(decisions.values()))
-        num_classes = len(data.id2label)
-        decision_features = one_hot_with_ignore(decisions_stacked.t(), num_classes, -1)
-        decision_features = decision_features.flatten(1)
-            
-        return preds_full, probs_full, decisions, decision_features
-    
-    def forward(self, data, *args, **kwargs):
-        data = data.clone()
+        self.parser_args['options'] = self.label_map
 
-        label_mask = data[self.sample_mask_attribute]
+        label_mask = context[self.mask_name]
         node_ids = torch.nonzero(label_mask).flatten().tolist()
-        preds,probs,decisions,decision_features = self.extract_labels(data, node_ids)
+        preds, probs, decisions = self.extract_labels(context, type_data, node_ids)
 
-        if not data.get('label_info'):
-            data.label_info = [{} for _ in range(data.num_nodes)]
+        if type_data.get(self.label_attribute) is None:
+            type_data[self.label_attribute] = torch.full((type_data.num_nodes,), -1)
+
+        type_data[self.label_attribute][label_mask] = preds[label_mask]
+
+        if not type_data.get('label_info'):
+            context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
         for node_id in node_ids:
-            data.label_info[node_id] = {
-                'source': ', '.join(self.model_paths) + f' @ {self.threshold:.2f}',
-                'decisions': {model: decisions[model][node_id].item() for model in self.model_paths },
-                'prob': probs[node_id].item()}
-        
-        data.y = preds
-        
-        if self.concatenate_decisions_to_x:
-            if self.concatenate_decisions_to_x == 'prepend':
-                data.x = torch.concat((decision_features, data.x), dim=1)
-            else:
-                data.x = torch.concat((data.x, decision_features), dim=1)
+            context['label_info'][node_id] = {
+                'source': 'llm_ensemble (' + ', '.join(sorted(self.model_paths)) + ')' + (f' @ {self.threshold:.2f}' if self.threshold else ''),
+                'decisions': {model_path: decisions[model_path][node_id].item() for model_path in self.model_paths},
+                'prob': probs[node_id].item()
+            }
 
-        elif self.decision_features_attribute:
-            data[self.decision_features_attribute] = decision_features
+        context['graph'] = data
 
-        return data
-    
-    @classmethod
-    def from_config(cls, params, *args, extra_config={}, **kwargs):
-        print(kwargs)
-        prompt_template = params['prompt_template']
-        if isinstance(prompt_template, dict):
-            template = ('{' + prompt_template["source"] + '}').format(**extra_config)
-            params['prompt_template'] = template
-        
-        return super().from_config(params, **kwargs)
+        return context
