@@ -157,4 +157,6 @@ class LLMNodeGenerator(Component):
         if self.unload_model:
             self.model.unload_model()
 
+        print(data)
+
         return context

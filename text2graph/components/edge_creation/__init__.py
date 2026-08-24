@@ -1,6 +1,2 @@
 from .knn import KNNEdgeCreator
-
-
-__all__ = [
-    'KNNEdgeCreator'
-]
+from .hetero_knn import HeteroKNNEdgeCreator

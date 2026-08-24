@@ -1,6 +1,1 @@
-from .gcn import GCN
-
-
-__all__ = [
-    'GCN'
-]
+from .gnn import GCN, HeteroGNN

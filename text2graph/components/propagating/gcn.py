@@ -1,6 +1,6 @@
 from ..component import Component
 from ..component_registry import register_component
-from ...gnn.gcn import GCN
+from ...gnn import GCN
 
 import torch
 import torch.nn.functional as F
