@@ -45,7 +45,7 @@ class SentenceEmbeddingExtractor(Component):
         }
 
     def compute_representations(self, texts):
-        return self.model.encode(texts, convert_to_tensor=True, prompt=self.prompt).cpu()
+        return self.model.encode(texts, convert_to_tensor=True, prompt=self.prompt, normalize_embeddings=True).to(torch.float).cpu().clone()
     
     def run(self, context):
         data = context['graph']
@@ -65,8 +65,8 @@ class SentenceEmbeddingExtractor(Component):
 
         if self.unload_model:
             del self.model
-            torch.cuda.empty_cache()
             gc.collect()
+            torch.cuda.empty_cache()
 
             self.model = None
 
