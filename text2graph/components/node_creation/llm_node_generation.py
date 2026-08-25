@@ -14,7 +14,6 @@ class LLMNodeGenerator(Component):
     def __init__(self,
         prompt_template,
         node_type,
-        source_node_type=None,
         num_generations=1,
         model=None,
         model_path=None,
@@ -69,7 +68,6 @@ class LLMNodeGenerator(Component):
 
         self.prompt_template = prompt_template
         self.node_type = node_type
-        self.source_node_type = source_node_type or node_type
         self.num_generations = num_generations
         self.text_attribute = text_attribute
         self.label_attribute = label_attribute
@@ -81,7 +79,6 @@ class LLMNodeGenerator(Component):
         self.str_parameters = {
             'model': self.model.model_name,
             'node_type': node_type,
-            'source_node_type': self.source_node_type,
             'generated_mask_name': generated_mask_name,
             'temperature': temperature
         }
@@ -109,9 +106,6 @@ class LLMNodeGenerator(Component):
 
     def run(self, context):
         data = context['graph']
-
-        if self.source_node_type not in context['node_types']:
-            raise ValueError(f'"{self.source_node_type}" not a valid type, only {context["node_types"]}')
 
         is_new_layer = self.node_type not in context['node_types']
 
