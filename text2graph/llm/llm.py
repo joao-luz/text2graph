@@ -3,6 +3,7 @@ import vllm
 import gc
 import ray
 import torch
+import re
 
 
 class LLM():
@@ -54,6 +55,9 @@ class LLM():
         self.default_chat_kwargs = chat_kwargs
 
     def invoke(self, prompts, temperature=0.7, sampling_kwargs={}, chat_kwargs={}):
+        if not prompts:
+            return []
+
         if not self.loaded:
             self.load_model()
 
@@ -67,7 +71,7 @@ class LLM():
 
         chat_kwargs = chat_kwargs or self.default_chat_kwargs
         outputs = self.model.chat(chats, sampling_params, **chat_kwargs)
-        generated_texts = [output.outputs[0].text for output in outputs]
+        generated_texts = [re.sub(r'<think>.*?</think>', '', output.outputs[0].text, flags=re.DOTALL).strip() for output in outputs]
 
         return generated_texts if not single_prompt else generated_texts[0]
     

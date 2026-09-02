@@ -1,6 +1,5 @@
 from ..component import Component
 from ..component_registry import register_component
-from ...gnn import HeteroGNN
 
 import torch
 import torch.nn.functional as F
