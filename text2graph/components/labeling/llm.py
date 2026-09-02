@@ -1,6 +1,7 @@
 from ..component import Component
 from ..component_registry import register_component
 from ...llm import LLM
+from ...utils import load_llm_responses_from_cache, save_llm_responses_to_cache
 
 import regex as re
 import torch
@@ -22,7 +23,10 @@ class LLMLabeler(Component):
         response_parser=None, 
         parser_args={}, 
         temperature=0.0,
-        unload_model=True
+        unload_model=True,
+        cache_dir='cache',
+        cache_file='labels',
+        load_from_cache=False
     ):
         assert model or model_path, 'Either pass a model or a model path'
 
@@ -36,7 +40,7 @@ class LLMLabeler(Component):
             text = data.text[node_id]
             index = sum(len(token) for token in text.split()[:cap]) + cap
             text = text[:index]
-            return {'text': text}
+            return {'text': text, 'key': node_id}
 
         def default_parser(response, options):
             m = re.search(r'([0-9]+)', response)
@@ -60,6 +64,14 @@ class LLMLabeler(Component):
         self.temperature = temperature
         self.unload_model = unload_model
 
+        self.cache_dir = cache_dir
+        self.cache_file = cache_file
+        self.load_from_cache = load_from_cache
+
+        if self.load_from_cache is None and self.cache_dir:
+            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+            self.load_from_cache = False
+
         self.str_parameters = {
             'model': self.model.model_name,
             'mask_name': mask_name,
@@ -68,17 +80,25 @@ class LLMLabeler(Component):
             'temperature': temperature
         }
 
-    def set_prompt_template(self, new_template):
-        self.prompt_template = new_template
-
-    def set_parser_args(self, new_args):
-        self.parser_args = new_args
-
     def extract_labels(self, context, type_data, node_ids):        
         inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
-        prompts = [self.prompt_template.format(**input) for input in inputs]
-        outputs = self.model.invoke(prompts, self.temperature)
-        parsed = [self.response_parser(output, **self.parser_args) for output in outputs]
+        unprocessed_keys = [input['key'] for input in inputs]
+        responses = []
+        
+        cache_path = f'{self.cache_dir}/{self.model.sanitized_model_name}/{self.cache_file}.json'
+
+        if self.load_from_cache:
+            cache_keys = [input['key'] for input in inputs]
+            responses, unprocessed_keys = load_llm_responses_from_cache(cache_path, cache_keys)
+
+        prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
+        responses_list = self.model.invoke(prompts, self.temperature)
+        responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
+
+        if self.cache_dir is not None:
+            save_llm_responses_to_cache(cache_path, responses)
+
+        parsed = [self.response_parser(response, **self.parser_args) for response in responses.values()]
 
         labels = torch.full((type_data.num_nodes, ), -1)
         for i,node_id in enumerate(node_ids):

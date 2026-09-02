@@ -1,7 +1,7 @@
 from ..component import Component
 from ..component_registry import register_component
 from ...llm import LLM
-from ...utils import data_to_hetero
+from ...utils import data_to_hetero, load_llm_responses_from_cache, save_llm_responses_to_cache
 
 import regex as re
 import torch
@@ -24,7 +24,10 @@ class LLMNodeGenerator(Component):
         response_parser=None,
         temperature=0.7,
         unload_model=True,
-        true_labels=None
+        true_labels=None,
+        cache_dir='cache',
+        cache_file=None,
+        load_from_cache=False
     ):
         assert model or model_path, 'Either pass a model or a model path'
 
@@ -36,7 +39,7 @@ class LLMNodeGenerator(Component):
         def build_inputs(context):
             inputs = []
             for class_label in context['classes'].values():
-                inputs.append({'class_label': class_label})
+                inputs.append({'class_label': class_label, 'key': class_label})
 
             return inputs
 
@@ -76,6 +79,14 @@ class LLMNodeGenerator(Component):
         self.unload_model = unload_model
         self.true_labels = true_labels
 
+        self.cache_dir = cache_dir
+        self.load_from_cache = load_from_cache
+        self.cache_file = cache_file or node_type
+
+        if self.load_from_cache is None and self.cache_dir:
+            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+            self.load_from_cache = False
+
         self.str_parameters = {
             'model': self.model.model_name,
             'node_type': node_type,
@@ -83,18 +94,28 @@ class LLMNodeGenerator(Component):
             'temperature': temperature
         }
 
-    def set_prompt_template(self, new_template):
-        self.prompt_template = new_template
-
     def generate_nodes(self, context):
         inputs = self.inputs_builder(context)
-        prompts = [self.prompt_template.format(**input) for input in inputs]
-        outputs = self.model.invoke(prompts, self.temperature)
+        unprocessed_keys = [input['key'] for input in inputs]
+        responses = []
+
+        cache_path = f'{self.cache_dir}/{self.model.sanitized_model_name}/{self.cache_file}.json'
+
+        if self.load_from_cache:
+            cache_keys = [input['key'] for input in inputs]
+            responses, unprocessed_keys = load_llm_responses_from_cache(cache_path, cache_keys)
+
+        prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
+        responses_list = self.model.invoke(prompts, self.temperature)
+        responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
+
+        if self.cache_dir is not None:
+            save_llm_responses_to_cache(cache_path, responses)
 
         texts = []
         labels = []
-        for input,output in zip(inputs, outputs):
-            parsed = self.response_parser(output)
+        for input,response in zip(inputs, responses.values()):
+            parsed = self.response_parser(response)
             if isinstance(parsed, str):
                 parsed = [parsed]
 
