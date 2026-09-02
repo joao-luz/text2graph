@@ -48,6 +48,7 @@ class DocumentsToNodes(Component):
             raise TypeError(f'Expected graph to be torch_geometric.data.Data, HeteroData, or None, got {type(graph).__name__}')
 
         node_store.text = documents
+        node_store.num_nodes = len(documents)
 
         if self.labels is not None:
             if self.labels not in context:
