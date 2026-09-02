@@ -9,20 +9,26 @@ from torch_geometric.data import HeteroData
 
 @register_component('random_sampler')
 class RandomSampler(Component):
-    def __init__(self, n=100, node_type='documents', mask_name='to_label'):
+    def __init__(self, n=100, node_type='documents', mask_name='to_label', label_attribute='pseudo_y'):
         self.n = n
         self.node_type = node_type
         self.mask_name = mask_name
+        self.label_attribute = label_attribute
 
         self.str_parameters = {
             'n': n,
             'node_type': node_type,
             'mask_name': mask_name,
+            'label_attribute': label_attribute,
         }
 
-    def sample_nodes(self, indices):        
+    def sample_nodes(self, data, indices):
+        n = self.n
+        if isinstance(n, float):
+            n = int(data.num_nodes*n)
+
         shuffled_indices = torch.randperm(len(indices))
-        sampled_indices = indices[shuffled_indices[:self.n]]
+        sampled_indices = indices[shuffled_indices[:n]]
 
         return sampled_indices
 
@@ -39,9 +45,9 @@ class RandomSampler(Component):
         else:
             mask = torch.ones(type_data.num_nodes, dtype=torch.bool)
 
-        indices = torch.tensor(type_data.num_nodes)[mask]
+        indices = torch.arange(type_data.num_nodes)[mask]
 
-        sampled_indices = self.sample_nodes(indices)
+        sampled_indices = self.sample_nodes(type_data, indices)
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
         mask[sampled_indices] = True
 
