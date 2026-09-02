@@ -19,6 +19,15 @@ def is_obj_str(str):
     return str.startswith('${') and str.endswith('}')
 
 
+def convert_parameter(val_str, context):
+    if is_obj_str(val_str):
+        val = resolve_str_to_object(val_str, context)
+    else:
+        val = val_str.format(**context)
+
+    return val
+
+
 def load_component_from_config(component_config, context):
     name = component_config['name']
     cls = COMPONENTS[name]
@@ -31,11 +40,12 @@ def load_component_from_config(component_config, context):
     else:
         parameters = component_config.get('parameters') or {}
         for param,val in parameters.items():
-            if isinstance(val, str):
-                if is_obj_str(val):
-                    parameters[param] = resolve_str_to_object(val, context)
-                else:
-                    parameters[param] = val.format(**context)
+            if isinstance(val, list):
+                val = [convert_parameter(v, context) for v in val]
+            elif isinstance(val, str):
+                val = convert_parameter(val, context)
+
+            parameters[param] = val
 
     component = cls(**parameters)
 
