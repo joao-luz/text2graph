@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 vllm = [
     "ray>=2.57.0",
-    "vllm==0.20.0",
+    "vllm==0.28.0",
 ]
 
 [build-system]
