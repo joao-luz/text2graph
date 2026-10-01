@@ -51,6 +51,26 @@ def save_llm_responses_to_cache(cache_path, responses):
     save_json(current_cache, cache_path)
 
 
+def load_embeddings_from_cache(cache_path):
+    import torch
+
+    if not Path(cache_path).is_file():
+        print(f'Cache path "{cache_path}" doesn\'t exist. Will compute embeddings')
+        return None
+
+    print(f'Loading embeddings from "{cache_path}".')
+
+    return torch.load(cache_path, weights_only=True)
+
+
+def save_embeddings_to_cache(cache_path, embeddings):
+    import torch
+
+    Path(cache_path).parent.mkdir(exist_ok=True, parents=True)
+
+    torch.save(embeddings, cache_path)
+
+
 def data_to_hetero(data, node_type='documents'):
     from torch_geometric.data import HeteroData
 
