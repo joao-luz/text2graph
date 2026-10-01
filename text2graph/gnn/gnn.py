@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from torch_geometric.nn import GCNConv, HeteroConv, SAGEConv
@@ -13,6 +14,18 @@ class GCN(torch.nn.Module):
     def forward(self, x, edge_index):
         x = self.conv1(x, edge_index).relu()
         x = self.conv2(x, edge_index)
+        return x
+
+
+class MLP(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels):
+        super().__init__()
+        self.lin1 = nn.Linear(in_channels, hidden_channels)
+        self.lin2 = nn.Linear(hidden_channels, out_channels)
+
+    def forward(self, x):
+        x = self.lin1(x).relu()
+        x = self.lin2(x)
         return x
 
 
