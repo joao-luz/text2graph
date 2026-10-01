@@ -81,15 +81,13 @@ class LMPropagator(Component):
             learning_rate=self.lr,
             eval_strategy="no",
             save_strategy="no",
-            logging_dir="./logs",
             logging_steps=50,
         )
 
         trainer = Trainer(
             model=model,
             args=training_args,
-            train_dataset=train_dataset,
-            tokenizer=tokenizer,
+            train_dataset=train_dataset
         )
 
         trainer.train()
@@ -118,7 +116,7 @@ class LMPropagator(Component):
             context['label_info'] = [{} for _ in range(context.num_nodes)]
 
         for node_id,pred,prob in zip(unlabeled_node_ids, preds[~train_mask], probs[~train_mask]):
-            type_data['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
+            context['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
             type_data[self.label_attribute][node_id] = pred
 
         return context
