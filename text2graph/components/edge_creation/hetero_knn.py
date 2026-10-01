@@ -9,19 +9,21 @@ from torch_geometric.data import Data, HeteroData
 
 @register_component('hetero_knn_edge_creator')
 class HeteroKNNEdgeCreator(Component):
-    def __init__(self, k, source_node_type, destine_node_type, link_name='similar', representation_attr='x', rev_link=True):
+    def __init__(self, k, source_node_type, destine_node_type, link_name='similar', representation_attr='x', rev_link=True, min_similarity=None):
         self.k = k
         self.node_type_pair = (source_node_type, destine_node_type)
         self.link_name = link_name
         self.representation_attr = representation_attr
         self.rev_link = rev_link
+        self.min_similarity = min_similarity
 
         self.str_parameters = {
             'k': k,
             'node_type_pair': (source_node_type, destine_node_type),
             'link_name': link_name,
             'representation_attr': representation_attr,
-            'rev_link': rev_link
+            'rev_link': rev_link,
+            'min_similarity': min_similarity
         }
 
     def compute_knn(self, x_src, x_dst, same_type):
@@ -49,10 +51,22 @@ class HeteroKNNEdgeCreator(Component):
 
         src_index = torch.arange(n_src, device=x_src.device).view(-1, 1).expand(-1, k).reshape(-1)
         dst_index = topk_idx.reshape(-1)
+        sim_flat = topk_sim.reshape(-1)
+
+        if self.min_similarity is not None:
+            # Drop weak "nearest" matches instead of always connecting exactly k
+            # neighbors -- avoids meaningless edges when nothing is truly similar.
+            keep = sim_flat >= self.min_similarity
+            if not keep.any():
+                raise ValueError(
+                    f'No edges left after applying min_similarity={self.min_similarity} '
+                    f'between "{self.node_type_pair[0]}" and "{self.node_type_pair[1]}".'
+                )
+            src_index, dst_index, sim_flat = src_index[keep], dst_index[keep], sim_flat[keep]
 
         edge_index = torch.stack([src_index, dst_index], dim=0)
 
-        return edge_index, topk_sim.reshape(-1, 1)
+        return edge_index, sim_flat.reshape(-1, 1)
 
     def run(self, context):
         data = context['graph']
