@@ -1,5 +1,7 @@
 import logging
 
+from string import Formatter
+
 from .components import RepeatComponent
 from .components.component_registry import get_component
 
@@ -12,11 +14,9 @@ __all__ = [
 ]
 
 
-def _resolve_str_to_object(str, context):
-    from string import Formatter
+def _resolve_str_to_object(obj_str, context):
+    clean_path = obj_str.strip('${}')
 
-    clean_path = str.strip('${}')
-    
     formatter = Formatter()
     try:
         obj, _ = formatter.get_field(clean_path, (), context)
@@ -25,8 +25,8 @@ def _resolve_str_to_object(str, context):
         return None
 
 
-def _is_obj_str(str):
-    return str.startswith('${') and str.endswith('}')
+def _is_obj_str(obj_str):
+    return obj_str.startswith('${') and obj_str.endswith('}')
 
 
 def _convert_parameter(val_str, context):
