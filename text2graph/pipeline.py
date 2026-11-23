@@ -42,6 +42,8 @@ def _load_component_from_config(component_config, context):
     name = component_config['name']
     cls = COMPONENTS[name]
 
+    parameters = dict(component_config.get('parameters') or {})
+
     if cls == RepeatComponent:
         parameters = component_config.get('parameters') or {}
         steps = parameters.get('steps') or {}
