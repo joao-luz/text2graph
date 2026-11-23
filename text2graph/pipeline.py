@@ -14,6 +14,10 @@ __all__ = [
 ]
 
 
+def _available_keys(context):
+    return ', '.join(sorted(context)) or '(none)'
+
+
 def _resolve_str_to_object(obj_str, context):
     clean_path = obj_str.strip('${}')
 
@@ -21,8 +25,11 @@ def _resolve_str_to_object(obj_str, context):
     try:
         obj, _ = formatter.get_field(clean_path, (), context)
         return obj
-    except (KeyError, IndexError, AttributeError):
-        return None
+    except (KeyError, IndexError, AttributeError, TypeError) as e:
+        raise ValueError(
+            f'Could not resolve "{obj_str}" ({type(e).__name__}: {e}). '
+            f'Available Pipeline arguments: {_available_keys(context)}'
+        ) from e
 
 
 def _is_obj_str(obj_str):
@@ -33,7 +40,14 @@ def _convert_parameter(val_str, context):
     if _is_obj_str(val_str):
         val = _resolve_str_to_object(val_str, context)
     else:
-        val = val_str.format(**context)
+        try:
+            val = val_str.format(**context)
+        except (KeyError, IndexError, AttributeError, ValueError) as e:
+            raise ValueError(
+                f'Could not format "{val_str}" ({type(e).__name__}: {e}). '
+                f'Available Pipeline arguments: {_available_keys(context)}. '
+                'Literal braces in config strings must be doubled: {{ and }}'
+            ) from e
 
     return val
 
