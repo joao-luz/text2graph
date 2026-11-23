@@ -37,7 +37,8 @@ class LLMEnsembleLabeler(Component):
         cache_file='labels',
         load_from_cache=False
     ):
-        assert model_paths is not None or models is not None, 'Either pass a list of models or model paths'
+        if models is None and model_paths is None:
+            raise ValueError('Either pass a list of models or model paths')
 
         if models is not None:
             self.models = models

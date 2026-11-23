@@ -74,7 +74,8 @@ def _load_steps_from_config(component_configs, context):
 
 class Pipeline:
     def __init__(self, steps=None, config=None, verbose=True, **context_kwargs):
-        assert (steps is not None) ^ (config is not None), 'Either pass a list of steps for the pipeline or a config dict.'
+        if (steps is None) == (config is None):
+            raise ValueError('Pass exactly one of `steps` (a list of components) or `config` (a dict with a "steps" list)')
 
         self.steps = steps
         self.context = context_kwargs

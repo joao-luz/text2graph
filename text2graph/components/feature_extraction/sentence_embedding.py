@@ -32,7 +32,8 @@ class SentenceEmbeddingExtractor(Component):
         ):
         super().__init__()
 
-        assert model or model_path, 'Either pass a model or a model path'
+        if model is None and model_path is None:
+            raise ValueError('Either pass a model or a model path')
 
         self.graph_embedding_attribute = graph_embedding_attribute
         self.texts_attribute = texts_attribute

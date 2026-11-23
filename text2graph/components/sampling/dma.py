@@ -337,7 +337,8 @@ class DMASampler(Component):
             pseudo_sample_cache_dir=None, 
             label_embedding_cache_dir=None
         ):
-        assert model or model_path, 'Either pass a model or a model path'
+        if model is None and model_path is None:
+            raise ValueError('Either pass a model or a model path')
 
         self.model = model if model else load_llm(model_path)
         model_path = self.model.model_name
