@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch_geometric.nn import GCNConv, HeteroConv, SAGEConv
+from torch_geometric.nn import GCNConv, HeteroConv, SAGEConv, HANConv
 
 
 class GCN(torch.nn.Module):
@@ -62,3 +62,62 @@ class HeteroGNN(torch.nn.Module):
             if i < len(self.convs) - 1:
                 x_dict = {key: F.relu(x) for key, x in x_dict.items()}
         return x_dict
+
+
+class HAN(nn.Module):
+    """Heterogeneous GNN using HANConv (node-level + semantic-level attention).
+
+    Every node type is first linearly projected into hidden_channels, so that
+    node types with no incoming edges at some (or all) layers -- which pass
+    through HANConv unchanged -- stay dimensionally consistent with node
+    types that do get updated, instead of drifting back to their raw input
+    width.
+    """
+    def __init__(self, metadata, hidden_channels, out_channels, num_layers=2, heads=8, dropout=0.0):
+        super().__init__()
+
+        if hidden_channels % heads != 0:
+            raise ValueError(
+                f'hidden_channels ({hidden_channels}) must be divisible by heads ({heads}) -- '
+                f'HANConv splits its output into `heads` chunks internally.'
+            )
+
+        node_types = metadata[0]
+
+        self.proj_dict = nn.ModuleDict({
+            node_type: nn.LazyLinear(hidden_channels)
+            for node_type in node_types
+        })
+
+        self.convs = nn.ModuleList([
+            HANConv(in_channels=hidden_channels, out_channels=hidden_channels, metadata=metadata, heads=heads, dropout=dropout)
+            for _ in range(num_layers)
+        ])
+
+        self.lin_dict = nn.ModuleDict({
+            node_type: nn.Linear(hidden_channels, out_channels)
+            for node_type in node_types
+        })
+
+    def forward(self, x_dict, edge_index_dict, return_semantic_attention_weights=False):
+        x_dict = {node_type: F.relu(self.proj_dict[node_type](x)) for node_type, x in x_dict.items()}
+
+        attention_weights = [] if return_semantic_attention_weights else None
+
+        for conv in self.convs:
+            if return_semantic_attention_weights:
+                out_dict, attn_dict = conv(x_dict, edge_index_dict, return_semantic_attention_weights=True)
+                attention_weights.append(attn_dict)
+            else:
+                out_dict = conv(x_dict, edge_index_dict)
+
+            x_dict = {
+                node_type: (F.relu(out_dict[node_type]) if out_dict.get(node_type) is not None else x_dict[node_type])
+                for node_type in x_dict
+            }
+
+        out_dict = {node_type: self.lin_dict[node_type](x) for node_type, x in x_dict.items()}
+
+        if return_semantic_attention_weights:
+            return out_dict, attention_weights
+        return out_dict
