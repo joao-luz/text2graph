@@ -4,3 +4,12 @@ from .language_model import LMPropagator
 from .hetero_gnn import HeteroGNNPropagator
 from .han import HANPropagator
 from .label_propagation import LabelPropagator
+
+__all__ = [
+    'GCNPropagator',
+    'MLPPropagator',
+    'LMPropagator',
+    'HeteroGNNPropagator',
+    'HANPropagator',
+    'LabelPropagator',
+]

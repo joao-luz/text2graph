@@ -2,7 +2,12 @@ from .components import RepeatComponent
 from .components.component_registry import COMPONENTS
 
 
-def resolve_str_to_object(str, context):
+__all__ = [
+    'Pipeline',
+]
+
+
+def _resolve_str_to_object(str, context):
     from string import Formatter
 
     clean_path = str.strip('${}')
@@ -15,35 +20,35 @@ def resolve_str_to_object(str, context):
         return None
 
 
-def is_obj_str(str):
+def _is_obj_str(str):
     return str.startswith('${') and str.endswith('}')
 
 
-def convert_parameter(val_str, context):
-    if is_obj_str(val_str):
-        val = resolve_str_to_object(val_str, context)
+def _convert_parameter(val_str, context):
+    if _is_obj_str(val_str):
+        val = _resolve_str_to_object(val_str, context)
     else:
         val = val_str.format(**context)
 
     return val
 
 
-def load_component_from_config(component_config, context):
+def _load_component_from_config(component_config, context):
     name = component_config['name']
     cls = COMPONENTS[name]
 
     if cls == RepeatComponent:
         parameters = component_config.get('parameters') or {}
         steps = parameters.get('steps') or {}
-        parameters['steps'] = load_steps_from_config(steps, context)
+        parameters['steps'] = _load_steps_from_config(steps, context)
 
     else:
         parameters = component_config.get('parameters') or {}
         for param,val in parameters.items():
             if isinstance(val, list):
-                val = [convert_parameter(v, context) for v in val]
+                val = [_convert_parameter(v, context) for v in val]
             elif isinstance(val, str):
-                val = convert_parameter(val, context)
+                val = _convert_parameter(val, context)
 
             parameters[param] = val
 
@@ -52,11 +57,11 @@ def load_component_from_config(component_config, context):
     return component
 
 
-def load_steps_from_config(component_configs, context):
+def _load_steps_from_config(component_configs, context):
     steps = []
 
     for component_config in component_configs:
-        component = load_component_from_config(component_config, context)
+        component = _load_component_from_config(component_config, context)
         steps.append(component)
 
     return steps
@@ -71,7 +76,7 @@ class Pipeline:
         self.verbose = verbose
 
         if config is not None:
-            self.steps = load_steps_from_config(config['steps'], self.context)
+            self.steps = _load_steps_from_config(config['steps'], self.context)
 
     def __str__(self):
         steps_str = '\n'.join(['\t' + line for line in ',\n'.join([str(step) for step in self.steps]).split('\n')])
