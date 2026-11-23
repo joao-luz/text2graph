@@ -45,15 +45,13 @@ def _load_component_from_config(component_config, context):
     parameters = dict(component_config.get('parameters') or {})
 
     if cls == RepeatComponent:
-        parameters = component_config.get('parameters') or {}
-        steps = parameters.get('steps') or {}
+        steps = parameters.get('steps') or []
         parameters['steps'] = _load_steps_from_config(steps, context)
 
     else:
-        parameters = component_config.get('parameters') or {}
         for param,val in parameters.items():
             if isinstance(val, list):
-                val = [_convert_parameter(v, context) for v in val]
+                val = [_convert_parameter(v, context) if isinstance(v, str) else v for v in val]
             elif isinstance(val, str):
                 val = _convert_parameter(val, context)
 
