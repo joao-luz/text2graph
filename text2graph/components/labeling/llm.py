@@ -1,6 +1,6 @@
 from ..component import Component
 from ..component_registry import register_component
-from ...llm import LLM
+from ...llm import load_llm
 from ...utils import load_llm_responses_from_cache, save_llm_responses_to_cache
 
 import regex as re
@@ -33,7 +33,7 @@ class LLMLabeler(Component):
         if model:
             self.model = model
         else:
-            self.model = LLM(model_path)
+            self.model = load_llm(model_path)
 
         def default_input_builder(context, node_type, node_id, cap=1200):
             data = context['graph'] if isinstance(context['graph'], Data) else context['graph'][node_type]

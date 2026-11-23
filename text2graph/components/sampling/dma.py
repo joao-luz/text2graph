@@ -2,7 +2,7 @@
 
 from ..component import Component
 from ..component_registry import register_component
-from ...llm import LLM
+from ...llm import load_llm
 
 import copy
 import json
@@ -339,11 +339,8 @@ class DMASampler(Component):
         ):
         assert model or model_path, 'Either pass a model or a model path'
 
-        if model:
-            self.model = model
-            model_path = model.model_name
-        else:
-            self.model = LLM(model_path)
+        self.model = model if model else load_llm(model_path)
+        model_path = self.model.model_name
 
         self.model_path = model_path
         self.prompt_template = prompt_template

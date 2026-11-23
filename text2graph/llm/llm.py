@@ -20,10 +20,13 @@ the SDKs' usual environment variables (``OPENAI_API_KEY``, ``OPENAI_BASE_URL``,
 
 import gc
 import importlib
+import os
 import re
 import warnings
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import torch
 
@@ -77,6 +80,39 @@ class LLM:
         self.loaded = False
         self.model = None
         self.default_chat_kwargs = {}
+
+    @classmethod
+    def from_config(cls, config):
+        config = dict(config)
+
+        if 'model' not in config:
+            raise ValueError(f'LLM config needs a "model" key, got keys {sorted(config)}.')
+        model_name = config.pop('model')
+        chat_kwargs = config.pop('chat_kwargs', None)
+        api_key_env = config.pop('api_key_env', None)
+
+        if api_key_env is not None:
+            if api_key_env not in os.environ:
+                raise KeyError(f'LLM config sets api_key_env="{api_key_env}", but that environment variable is not set.')
+            config['api_key'] = os.environ[api_key_env]
+
+        llm = cls(model_name, **config)
+        if chat_kwargs:
+            llm.set_default_chat_kwargs(chat_kwargs)
+
+        return llm
+
+    @classmethod
+    def from_yaml(cls, path):
+        import yaml
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        if not isinstance(config, Mapping):
+            raise ValueError(f'"{path}" must contain a YAML mapping with at least a "model" key.')
+
+        return cls.from_config(config)
 
     def set_default_chat_kwargs(self, chat_kwargs):
         self.default_chat_kwargs = chat_kwargs
@@ -177,8 +213,6 @@ class VLLM(LLM):
 
 
 class _APILLM(LLM):
-    """Shared logic for remote APIs: one request per prompt, sent concurrently."""
-
     def __init__(
             self,
             model_name,
@@ -277,6 +311,22 @@ class AnthropicLLM(_APILLM):
             return ''
 
         return ''.join(block.text for block in response.content if block.type == 'text')
+
+
+def load_llm(spec):
+    if isinstance(spec, LLM):
+        return spec
+
+    if isinstance(spec, Mapping):
+        return LLM.from_config(spec)
+
+    if isinstance(spec, (str, os.PathLike)) and Path(spec).suffix in {'.yaml', '.yml'}:
+        return LLM.from_yaml(spec)
+
+    if isinstance(spec, str):
+        return LLM(spec)
+
+    raise TypeError(f'Cannot build an LLM from {type(spec).__name__}: pass a model name, a YAML path, a dict or an LLM.')
 
 
 _BACKENDS = {

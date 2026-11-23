@@ -1,6 +1,6 @@
 from ..component import Component
 from ..component_registry import register_component
-from ...llm import LLM
+from ...llm import load_llm
 from ...utils import data_to_hetero, load_llm_responses_from_cache, save_llm_responses_to_cache
 
 import regex as re
@@ -34,7 +34,7 @@ class LLMNodeGenerator(Component):
         if model:
             self.model = model
         else:
-            self.model = LLM(model_path)
+            self.model = load_llm(model_path)
 
         def build_inputs(context):
             inputs = []

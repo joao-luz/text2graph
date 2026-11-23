@@ -1,6 +1,6 @@
 from ..component import Component
 from ..component_registry import register_component
-from ...llm import LLM
+from ...llm import load_llm
 from ...utils import load_llm_responses_from_cache, save_llm_responses_to_cache
 
 import regex as re
@@ -39,8 +39,8 @@ class LLMEnsembleLabeler(Component):
             self.model_paths = [model.model_name for model in models]
 
         else:
-            self.model_paths = model_paths
-            self.models = [LLM(path) for path in model_paths]
+            self.models = [load_llm(path) for path in model_paths]
+            self.model_paths = [model.model_name for model in self.models]
         
         def default_input_builder(context, node_type, node_id, cap=1200):
             data = context['graph'] if isinstance(context['graph'], Data) else context['graph'][node_type]
