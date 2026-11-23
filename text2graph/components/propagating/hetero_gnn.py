@@ -128,9 +128,6 @@ class HeteroGNNPropagator(Component):
         train_mask = target_data[self.label_attribute] != -1
         unlabeled_node_ids = torch.arange(target_data.num_nodes)[~train_mask]
 
-        print(f'{train_mask.sum()} nodes with pseudo-labels')
-        print(f'{target_data[self.label_attribute][train_mask].unique(return_counts=True)}')
-
         preds, probs = self.propagate(data, node_types, edge_types, train_mask)
 
         if not context.get('label_info'):
