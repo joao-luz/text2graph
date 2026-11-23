@@ -1,7 +1,7 @@
 import logging
 
 from .components import RepeatComponent
-from .components.component_registry import COMPONENTS
+from .components.component_registry import get_component
 
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,10 @@ def _convert_parameter(val_str, context):
 
 
 def _load_component_from_config(component_config, context):
-    name = component_config['name']
-    cls = COMPONENTS[name]
+    if 'name' not in component_config:
+        raise ValueError(f'Pipeline step is missing a "name": {component_config}')
+
+    cls = get_component(component_config['name'])
 
     parameters = dict(component_config.get('parameters') or {})
 

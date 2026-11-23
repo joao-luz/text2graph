@@ -1,5 +1,5 @@
 from .component import Component, RepeatComponent
-from .component_registry import register_component
+from .component_registry import register_component, get_component
 
 from . import node_creation, edge_creation, feature_extraction, labeling, propagating, sampling
 
@@ -14,6 +14,7 @@ __all__ = [
     'Component',
     'RepeatComponent',
     'register_component',
+    'get_component',
     *node_creation.__all__,
     *edge_creation.__all__,
     *feature_extraction.__all__,
