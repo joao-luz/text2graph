@@ -1,23 +1,3 @@
-"""LLM backends used by the text2graph components.
-
-All backends share the same interface (``invoke``, ``embed``, ``load_model``,
-``unload_model``, ``set_default_chat_kwargs``, ``model_name``,
-``sanitized_model_name``), so components don't need to know where the model runs.
-
-The backend is picked from a prefix on the model name, or from ``backend=``:
-
-    LLM('Qwen/Qwen3-8B')                    # local vLLM engine (default)
-    LLM('openai:gpt-5-mini')                # OpenAI API
-    LLM('openai:Qwen/Qwen3-8B',             # any OpenAI-compatible server
-        base_url='http://localhost:8000/v1')   # (vllm serve, OpenRouter, ...)
-    LLM('anthropic:claude-opus-5-5')        # Anthropic API
-
-Because the prefix is part of the name, configs that only pass ``model_path``
-can use an API model without code changes. API keys and base URLs are read from
-the SDKs' usual environment variables (``OPENAI_API_KEY``, ``OPENAI_BASE_URL``,
-``ANTHROPIC_API_KEY``, ...) unless passed explicitly.
-"""
-
 import gc
 import importlib
 import os
@@ -60,6 +40,41 @@ def _split_backend(model_name, backend):
 
 
 class LLM:
+    """A language model, run locally with vLLM or called through an API.
+
+    ``LLM(...)`` returns an instance of the backend subclass picked from a prefix on
+    the model name, or from ``backend=``::
+
+        LLM('Qwen/Qwen3-8B')                       # local vLLM engine (default)
+        LLM('openai:gpt-5-mini')                   # OpenAI API
+        LLM('openai:Qwen/Qwen3-8B',                # any OpenAI-compatible server
+            base_url='http://localhost:8000/v1')   # (vllm serve, OpenRouter, ...)
+        LLM('anthropic:claude-opus-5-5')           # Anthropic API
+
+    Because the prefix is part of the name, configs that only pass ``model_path`` can
+    use an API model without code changes. All backends share this class's interface,
+    so components don't need to know where the model runs.
+
+    Args:
+        model_name: Model to use, optionally prefixed with a backend (``vllm:``,
+            ``openai:`` or ``anthropic:``).
+        backend: Backend to use when the name has no prefix. Defaults to ``'vllm'``.
+        **kwargs: Backend-specific options; see :class:`VLLM`, :class:`OpenAILLM`
+            and :class:`AnthropicLLM`.
+
+    Attributes:
+        model_name: Name including the backend prefix for API models (bare for vLLM),
+            so ``LLM(llm.model_name)`` rebuilds the same backend.
+        api_model_name: Name the backend is called with, without the prefix.
+        sanitized_model_name: ``model_name`` made safe for file paths; used for cache
+            directories.
+        loaded: Whether the model (or API client) is currently loaded.
+        default_chat_kwargs: Chat kwargs used by :meth:`invoke` when none are passed.
+
+    Raises:
+        ValueError: If the backend is unknown, or the prefix and ``backend`` disagree.
+    """
+
     backend = None
 
     def __new__(cls, model_name, *args, backend=None, **kwargs):
@@ -83,6 +98,21 @@ class LLM:
 
     @classmethod
     def from_config(cls, config):
+        """Build an LLM from a dict, such as one loaded from YAML.
+
+        Args:
+            config: Mapping with a required ``model`` key and these optional keys:
+            ``chat_kwargs`` (set as the default chat kwargs) and ``api_key_env``
+            (name of the environment variable holding the API key, so keys stay
+            out of config files). Every other key is passed to the constructor.
+
+        Returns:
+            The LLM instance for the configured backend.
+
+        Raises:
+            ValueError: If ``model`` is missing.
+            KeyError: If ``api_key_env`` names an environment variable that isn't set.
+        """
         config = dict(config)
 
         if 'model' not in config:
@@ -104,6 +134,20 @@ class LLM:
 
     @classmethod
     def from_yaml(cls, path):
+        """Build an LLM from a YAML file.
+
+        The file holds a mapping in the format described in :meth:`from_config`;
+        examples are in ``examples/configs/llms/``.
+
+        Args:
+            path: Path to the YAML file.
+
+        Returns:
+            The LLM instance for the configured backend.
+
+        Raises:
+            ValueError: If the file doesn't contain a mapping, or ``model`` is missing.
+        """
         import yaml
 
         with open(path) as f:
@@ -115,12 +159,28 @@ class LLM:
         return cls.from_config(config)
 
     def set_default_chat_kwargs(self, chat_kwargs):
+        """Set the chat kwargs :meth:`invoke` uses when it isn't given any.
+
+        Args:
+            chat_kwargs: For vLLM, kwargs for ``vllm.LLM.chat`` (e.g.
+                ``chat_template_kwargs``). For API backends, extra request fields
+                (e.g. ``extra_body`` for an OpenAI-compatible server).
+        """
         self.default_chat_kwargs = chat_kwargs
 
     def load_model(self, **kwargs):
+        """Load the model, or create the API client. Does nothing if already loaded.
+
+        :meth:`invoke` and :meth:`embed` call this when needed, so calling it
+        yourself is only useful to load ahead of time.
+        """
         self.loaded = True
 
     def unload_model(self):
+        """Free the model's resources (GPU memory or the API client's connections).
+
+        The model is loaded again automatically on the next :meth:`invoke`.
+        """
         self.loaded = False
 
     def __del__(self):
@@ -130,6 +190,22 @@ class LLM:
             pass
 
     def invoke(self, prompts, temperature=0.7, sampling_kwargs={}, chat_kwargs={}):
+        """Generate a response to each prompt, sent as a single user message.
+
+        ``<think>...</think>`` blocks are removed from the responses.
+
+        Args:
+            prompts: One prompt, or a list of prompts.
+            temperature: Sampling temperature. ``None`` sends no temperature, which
+                OpenAI reasoning models need. Ignored by :class:`AnthropicLLM`.
+            sampling_kwargs: For vLLM, extra ``vllm.SamplingParams`` arguments. For
+                API backends, extra request fields.
+            chat_kwargs: Overrides :attr:`default_chat_kwargs` for this call; see
+                :meth:`set_default_chat_kwargs`.
+
+        Returns:
+            The response text for a single prompt, or a list of texts in prompt order.
+        """
         if not prompts:
             return []
 
@@ -146,6 +222,17 @@ class LLM:
         return texts[0] if single_prompt else texts
 
     def embed(self, prompts):
+        """Embed each prompt. Supported by :class:`VLLM` and :class:`OpenAILLM`.
+
+        Args:
+            prompts: List of texts to embed.
+
+        Returns:
+            A tensor of shape ``(len(prompts), embedding_dim)``.
+
+        Raises:
+            NotImplementedError: If the backend has no embeddings API.
+        """
         raise NotImplementedError(f'The "{self.backend}" backend does not support embeddings.')
 
     def _generate(self, prompts, temperature, sampling_kwargs, chat_kwargs):
@@ -153,6 +240,16 @@ class LLM:
 
 
 class VLLM(LLM):
+    """A model run in-process with a local vLLM engine.
+
+    Args:
+        model_name: Hugging Face model id or local path, optionally prefixed with ``vllm:``.
+        load_model: Load the model now instead of on first use.
+        backend: Must be ``None`` or ``'vllm'``.
+        **vllm_args: Arguments for ``vllm.LLM``, on top of the defaults
+            ``max_model_len=4096`` and ``gpu_memory_utilization=0.8``.
+    """
+
     backend = 'vllm'
 
     def __init__(self, model_name, load_model=False, backend=None, **vllm_args):
@@ -163,6 +260,7 @@ class VLLM(LLM):
             self.load_model(**vllm_args)
 
     def unload_model(self):
+        """Delete the engine, free GPU memory and shut down Ray."""
         if not self.loaded:
             return
 
@@ -179,6 +277,11 @@ class VLLM(LLM):
         self.loaded = False
 
     def load_model(self, **vllm_args):
+        """Start the vLLM engine. Does nothing if already loaded.
+
+        Args:
+            **vllm_args: Arguments for ``vllm.LLM`` that override the constructor's.
+        """
         if self.loaded:
             return
 
@@ -204,6 +307,16 @@ class VLLM(LLM):
         return [output.outputs[0].text for output in outputs]
 
     def embed(self, prompts):
+        """Embed each prompt with vLLM's pooling runner.
+
+        If the model isn't loaded yet, it's loaded as an embedding model.
+
+        Args:
+            prompts: List of texts to embed.
+
+        Returns:
+            A tensor of shape ``(len(prompts), embedding_dim)``.
+        """
         if not self.loaded:
             self.load_model(runner='pooling')
 
@@ -213,6 +326,23 @@ class VLLM(LLM):
 
 
 class _APILLM(LLM):
+    """Shared logic for remote APIs: one request per prompt, sent concurrently.
+
+    Args:
+        model_name: Model name, optionally prefixed with the backend.
+        backend: Must be ``None`` or the subclass's backend.
+        api_key: API key. Defaults to the SDK's environment variable
+            (``OPENAI_API_KEY`` or ``ANTHROPIC_API_KEY``).
+        base_url: API base URL. Defaults to the SDK's environment variable
+            (``OPENAI_BASE_URL`` or ``ANTHROPIC_BASE_URL``), then the provider's URL.
+        max_tokens: Maximum output tokens per response, including any reasoning.
+        max_concurrency: Maximum requests in flight at once.
+        max_retries: Retries per request for rate limits, server and connection errors.
+        timeout: Request timeout in seconds. Defaults to the SDK's.
+        **request_kwargs: Extra fields sent with every request (e.g.
+            ``reasoning_effort`` for OpenAI, ``output_config`` for Anthropic).
+    """
+
     def __init__(
             self,
             model_name,
@@ -234,11 +364,13 @@ class _APILLM(LLM):
         self.request_kwargs = request_kwargs
 
     def load_model(self, **kwargs):
+        """Create the API client. Does nothing if already loaded."""
         if not self.loaded:
             self.model = self._make_client()
             self.loaded = True
 
     def unload_model(self):
+        """Close the API client."""
         if self.loaded and self.model is not None:
             self.model.close()
         self.model = None
@@ -258,6 +390,17 @@ class _APILLM(LLM):
 
 
 class OpenAILLM(_APILLM):
+    """A model called through the OpenAI Chat Completions API.
+
+    Works with OpenAI and any server that implements the API (``vllm serve``,
+    OpenRouter, ...); point ``base_url`` at the server. Server-specific options go in
+    ``extra_body``, e.g. for a vLLM server::
+
+        llm.set_default_chat_kwargs({'extra_body': {'chat_template_kwargs': {'enable_thinking': False}}})
+
+    Takes the constructor arguments described in :class:`_APILLM`.
+    """
+
     backend = 'openai'
 
     def _make_client(self):
@@ -277,6 +420,14 @@ class OpenAILLM(_APILLM):
         return response.choices[0].message.content or ''
 
     def embed(self, prompts):
+        """Embed each prompt with the Embeddings API. ``model_name`` must be an embedding model.
+
+        Args:
+            prompts: List of texts to embed.
+
+        Returns:
+            A tensor of shape ``(len(prompts), embedding_dim)``.
+        """
         if not self.loaded:
             self.load_model()
 
@@ -286,6 +437,16 @@ class OpenAILLM(_APILLM):
 
 
 class AnthropicLLM(_APILLM):
+    """A Claude model called through the Anthropic Messages API.
+
+    Current Claude models don't accept ``temperature``: it is ignored, with a warning
+    the first time. Use ``output_config={'effort': 'low'}`` (as a constructor kwarg or
+    chat kwarg) to trade quality for speed and cost. Refused requests return an empty
+    string. Embeddings aren't supported.
+
+    Takes the constructor arguments described in :class:`_APILLM`.
+    """
+
     backend = 'anthropic'
 
     def __init__(self, model_name, backend=None, **kwargs):
@@ -314,6 +475,21 @@ class AnthropicLLM(_APILLM):
 
 
 def load_llm(spec):
+    """Build an LLM from whatever a config or caller passes.
+
+    Used by the LLM components, so a pipeline's ``model_path`` can be any of these.
+
+    Args:
+        spec: An :class:`LLM` (returned as is), a mapping (:meth:`LLM.from_config`), a
+            path ending in ``.yaml``/``.yml`` (:meth:`LLM.from_yaml`) or a model name
+            (``LLM(spec)``).
+
+    Returns:
+        The LLM instance.
+
+    Raises:
+        TypeError: If ``spec`` is none of the above.
+    """
     if isinstance(spec, LLM):
         return spec
 
