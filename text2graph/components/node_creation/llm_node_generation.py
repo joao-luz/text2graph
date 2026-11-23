@@ -1,3 +1,5 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 from ...llm import load_llm
@@ -7,6 +9,9 @@ import regex as re
 import torch
 
 from torch_geometric.data import Data, HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('llm_node_generator')
@@ -83,8 +88,8 @@ class LLMNodeGenerator(Component):
         self.load_from_cache = load_from_cache
         self.cache_file = cache_file or node_type
 
-        if self.load_from_cache is None and self.cache_dir:
-            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+        if self.load_from_cache and self.cache_dir is None:
+            logger.warning("load_from_cache is set to True but cache_dir is None. Won't load from cache")
             self.load_from_cache = False
 
         self.str_parameters = {

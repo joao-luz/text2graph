@@ -1,3 +1,5 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 from ...gnn import HeteroGNN
@@ -6,6 +8,9 @@ import torch
 import torch.nn.functional as F
 
 from torch_geometric.data import HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('hetero_gnn_propagator')
@@ -80,7 +85,7 @@ class HeteroGNNPropagator(Component):
             loss = F.cross_entropy(out[train_mask], new_labels)
 
             if self.patience is not None and curr_patience == self.patience:
-                print(f'Early stopping due to patience = {self.patience}')
+                logger.info('Early stopping due to patience = %s', self.patience)
                 break
 
             patience_str = ''
@@ -91,7 +96,7 @@ class HeteroGNNPropagator(Component):
                 curr_patience += 1
                 patience_str = f', patience at {curr_patience}'
 
-            print(f'Epoch {epoch}: Loss = {loss}{patience_str}')
+            logger.debug('Epoch %d: Loss = %s%s', epoch, loss.item(), patience_str)
             loss.backward()
             optimizer.step()
 

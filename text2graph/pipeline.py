@@ -1,5 +1,10 @@
+import logging
+
 from .components import RepeatComponent
 from .components.component_registry import COMPONENTS
+
+
+logger = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -90,7 +95,7 @@ class Pipeline:
                 step.verbose = self.verbose
                 
             if self.verbose:
-                print(str(step) + '...')
+                logger.info('%s...', step)
             self.context = step(self.context)
 
         return self.context

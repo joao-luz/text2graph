@@ -1,6 +1,10 @@
 import json
+import logging
 
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -39,16 +43,16 @@ def load_llm_responses_from_cache(cache_path, keys):
     cache = load_json(cache_path)
 
     if cache is not None:
-        print(f'Loading prompt responses from "{cache_path}".')
+        logger.info('Loading prompt responses from "%s".', cache_path)
         for key in keys:
             if key in cache:
                 responses[key] = cache[key]
             else:
                 unprocessed_keys.append(key)
 
-        print(f'Loaded {len(responses)}/{len(keys)} responses')
+        logger.info('Loaded %d/%d responses', len(responses), len(keys))
     else:
-        print(f'Cache path "{cache_path}" doesn\'t exist. Will process promts')
+        logger.info("Cache path \"%s\" doesn't exist. Will process prompts", cache_path)
         unprocessed_keys = keys
 
     return responses, unprocessed_keys
@@ -66,10 +70,10 @@ def load_embeddings_from_cache(cache_path):
     import torch
 
     if not Path(cache_path).is_file():
-        print(f'Cache path "{cache_path}" doesn\'t exist. Will compute embeddings')
+        logger.info("Cache path \"%s\" doesn't exist. Will compute embeddings", cache_path)
         return None
 
-    print(f'Loading embeddings from "{cache_path}".')
+    logger.info('Loading embeddings from "%s".', cache_path)
 
     return torch.load(cache_path, weights_only=True)
 

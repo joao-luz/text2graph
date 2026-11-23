@@ -1,9 +1,14 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 
 import torch
 
 from torch_geometric.data import HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('label_propagator')
@@ -108,10 +113,10 @@ class LabelPropagator(Component):
             Y = Y_new
 
             if diff < self.tol:
-                print(f'label_propagator converged after {it + 1} iterations (max change {diff:.2e})')
+                logger.info('label_propagator converged after %d iterations (max change %.2e)', it + 1, diff)
                 break
         else:
-            print(f'label_propagator did not converge within {self.max_iter} iterations (max change {diff:.2e})')
+            logger.warning('label_propagator did not converge within %d iterations (max change %.2e)', self.max_iter, diff)
 
         row_sum = Y.sum(dim=1).clamp(min=1e-12)
         probs, preds = (Y / row_sum.unsqueeze(-1)).max(dim=1)

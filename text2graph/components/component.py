@@ -1,4 +1,9 @@
+import logging
+
 from .component_registry import register_component
+
+
+logger = logging.getLogger(__name__)
 
 
 class Component:
@@ -24,7 +29,7 @@ class RepeatComponent(Component):
         for i in range(self.n):
             for step in self.steps:
                 if self.verbose:
-                    print(str(step) + f' ({i})...')
+                    logger.info('%s (%d)...', step, i)
                 context = step(context)
 
         return context

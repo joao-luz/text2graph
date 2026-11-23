@@ -1,5 +1,6 @@
 import gc
 import importlib
+import logging
 import os
 import re
 import warnings
@@ -9,6 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import torch
+
+
+logger = logging.getLogger(__name__)
 
 
 _EXTRAS = {'vllm': 'vllm', 'ray': 'vllm', 'openai': 'openai', 'anthropic': 'anthropic'}
@@ -267,7 +271,7 @@ class VLLM(LLM):
         try:
             del self.model
         except Exception as e:
-            print(f"Failed to unload model: {e}")
+            logger.warning('Failed to unload model: %s', e)
         finally:
             gc.collect()
             torch.cuda.empty_cache()

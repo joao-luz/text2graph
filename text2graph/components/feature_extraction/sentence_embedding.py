@@ -1,3 +1,5 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 from ...utils import load_embeddings_from_cache, save_embeddings_to_cache
@@ -7,6 +9,9 @@ import gc
 
 from sentence_transformers import SentenceTransformer
 from torch_geometric.data import Data, HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('sentence_embedding_extractor')
@@ -49,8 +54,8 @@ class SentenceEmbeddingExtractor(Component):
         self.cache_file = cache_file
         self.load_from_cache = load_from_cache
 
-        if self.load_from_cache is None and self.cache_dir:
-            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+        if self.load_from_cache and self.cache_dir is None:
+            logger.warning("load_from_cache is set to True but cache_dir is None. Won't load from cache")
             self.load_from_cache = False
 
         self.str_parameters = {

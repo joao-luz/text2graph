@@ -1,3 +1,5 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 from ...llm import load_llm
@@ -7,6 +9,9 @@ import regex as re
 import torch
 
 from torch_geometric.data import Data, HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('llm_ensemble_labeler')
@@ -89,8 +94,8 @@ class LLMEnsembleLabeler(Component):
         self.cache_file = cache_file
         self.load_from_cache = load_from_cache
 
-        if self.load_from_cache is None and self.cache_dir:
-            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+        if self.load_from_cache and self.cache_dir is None:
+            logger.warning("load_from_cache is set to True but cache_dir is None. Won't load from cache")
             self.load_from_cache = False
 
         self.str_parameters = {
@@ -151,7 +156,7 @@ class LLMEnsembleLabeler(Component):
 
             prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
 
-            print(f'Voting with {model_path}...')
+            logger.info('Voting with %s...', model_path)
             responses_list = model.invoke(prompts, self.temperature)
             responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
 

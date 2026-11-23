@@ -1,3 +1,5 @@
+import logging
+
 from ..component import Component
 from ..component_registry import register_component
 from ...llm import load_llm
@@ -7,6 +9,9 @@ import regex as re
 import torch
 
 from torch_geometric.data import Data, HeteroData
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_component('llm_labeler')
@@ -68,8 +73,8 @@ class LLMLabeler(Component):
         self.cache_file = cache_file
         self.load_from_cache = load_from_cache
 
-        if self.load_from_cache is None and self.cache_dir:
-            print('load_from_cache is set to True but cache_dir is None. Won\'t load from cache')
+        if self.load_from_cache and self.cache_dir is None:
+            logger.warning("load_from_cache is set to True but cache_dir is None. Won't load from cache")
             self.load_from_cache = False
 
         self.str_parameters = {
