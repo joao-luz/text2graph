@@ -18,11 +18,6 @@ class LabelPropagator(Component):
     re-clamping the labeled nodes' distributions back to their true one-hot
     label after every iteration, until convergence or `max_iter` is reached.
 
-    Unlike gcn_propagator/mlp_propagator, this has no learned parameters --
-    it's a closed-form, deterministic propagation over the existing graph
-    structure (weighted by `edge_attr` when present, e.g. a k-NN similarity
-    score; uniform weights otherwise).
-
     Set `alpha` (in (0, 1)) to use the softer Label Spreading variant instead
     (Zhou et al., 2004), which blends propagated and original labels at every
     step rather than hard-clamping labeled nodes back exactly.
@@ -92,8 +87,6 @@ class LabelPropagator(Component):
         Y0 = torch.zeros(num_nodes, num_classes)
         Y0[labeled_ids, new_labels] = 1.0
 
-        # Row-normalized (weighted) adjacency: propagating node i's new
-        # distribution is the weighted average of its neighbors' distributions.
         deg = torch.zeros(num_nodes).scatter_add_(0, src, edge_weight).clamp(min=1e-12)
 
         Y = Y0.clone()
