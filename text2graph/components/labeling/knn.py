@@ -14,7 +14,7 @@ class KNNLabeler(Component):
         target_node_type,
         source_node_types=None,
         label_attribute='pseudo_y',
-        source_label_attribute='y',
+        source_label_attribute=None,
         representation_attr='x',
         threshold=0.5,
         mask_name=None
@@ -23,7 +23,7 @@ class KNNLabeler(Component):
         self.target_node_type = target_node_type
         self.source_node_types = source_node_types
         self.label_attribute = label_attribute
-        self.source_label_attribute = source_label_attribute
+        self.source_label_attribute = source_label_attribute or label_attribute
         self.representation_attr = representation_attr
         self.threshold = threshold
         self.mask_name = mask_name
@@ -33,7 +33,7 @@ class KNNLabeler(Component):
             'target_node_type': target_node_type,
             'source_node_types': source_node_types,
             'label_attribute': label_attribute,
-            'source_label_attribute': source_label_attribute,
+            'source_label_attribute': self.source_label_attribute,
             'threshold': threshold
         }
 
@@ -71,7 +71,11 @@ class KNNLabeler(Component):
         if self.target_node_type not in context['node_types']:
             raise ValueError(f'"{self.target_node_type}" not a valid type, only {context["node_types"]}')
 
-        source_node_types = self.source_node_types or [t for t in context['node_types'] if t != self.target_node_type]
+        source_node_types = (
+            self.source_node_types
+            or [t for t in context['node_types'] if t != self.target_node_type]
+            or [self.target_node_type]
+        )
 
         for node_type in source_node_types:
             if node_type not in context['node_types']:
@@ -94,6 +98,8 @@ class KNNLabeler(Component):
             source_data = data[node_type] if isinstance(data, HeteroData) else data
             labels = source_data[self.source_label_attribute]
             labeled_mask = labels != -1
+            if node_type == self.target_node_type:
+                labeled_mask = labeled_mask & ~target_mask
 
             source_reps.append(getattr(source_data, self.representation_attr)[labeled_mask])
             source_labels.append(labels[labeled_mask])
@@ -101,7 +107,7 @@ class KNNLabeler(Component):
         source_reps = torch.cat(source_reps, dim=0)
         source_labels = torch.cat(source_labels, dim=0)
 
-        if source_reps.size(0) == 0:
+        if source_labels.size(0) == 0:
             raise ValueError('No labeled source nodes found to compute KNN labels from.')
 
         preds, probs = self.compute_labels(target_data, target_ids, source_reps, source_labels)
