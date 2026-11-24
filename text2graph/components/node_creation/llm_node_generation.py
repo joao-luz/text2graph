@@ -177,26 +177,26 @@ class LLMNodeGenerator(Component):
             `(texts, labels)`: the generated node texts, and the class id of each.
         """
         inputs = self.inputs_builder(context)
-        unprocessed_keys = [input['key'] for input in inputs]
-        responses = []
+        responses = {}
 
         cache_path = f'{self.cache_dir}/{self.model.sanitized_model_name}/{self.cache_file}.json'
 
         if self.load_from_cache:
-            cache_keys = [input['key'] for input in inputs]
-            responses, unprocessed_keys = load_llm_responses_from_cache(cache_path, cache_keys)
+            responses, _ = load_llm_responses_from_cache(cache_path, [input['key'] for input in inputs])
 
-        prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
-        responses_list = self.model.invoke(prompts, self.temperature)
-        responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
+        pending = [input for input in inputs if input['key'] not in responses]
+        if pending:
+            prompts = [self.prompt_template.format(**input) for input in pending]
+            responses_list = self.model.invoke(prompts, self.temperature)
+            responses |= {input['key']: response for input,response in zip(pending, responses_list)}
 
         if self.cache_dir is not None:
             save_llm_responses_to_cache(cache_path, responses)
 
         texts = []
         labels = []
-        for input,response in zip(inputs, responses.values()):
-            parsed = self.response_parser(response)
+        for input in inputs:
+            parsed = self.response_parser(responses[input['key']])
             if isinstance(parsed, str):
                 parsed = [parsed]
 

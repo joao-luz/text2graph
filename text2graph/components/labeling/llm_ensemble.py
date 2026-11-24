@@ -115,56 +115,29 @@ class LLMEnsembleLabeler(Component):
     def set_parser_args(self, new_args):
         self.parser_args = new_args
 
-    def extract_labels(self, context, type_data, node_ids):        
-            inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
-            unprocessed_keys = [input['key'] for input in inputs]
-            responses = []
-            
-            cache_path = f'{self.cache_dir}/{self.model.sanitized_model_name}/{self.cache_file}.json'
-    
-            if self.load_from_cache:
-                cache_keys = [input['key'] for input in inputs]
-                responses, unprocessed_keys = load_llm_responses_from_cache(cache_path, cache_keys)
-    
-            prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
-            responses_list = self.model.invoke(prompts, self.temperature)
-            responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
-    
-            if self.cache_dir is not None:
-                save_llm_responses_to_cache(cache_path, responses)
-    
-            parsed = [self.response_parser(response, **self.parser_args) for response in responses.values()]
-    
-            labels = torch.full((type_data.num_nodes, ), -1)
-            for i,node_id in enumerate(node_ids):
-                labels[node_id] = parsed[i]
-    
-            return labels
-
     def extract_labels(self, context, type_data, node_ids):
         inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
 
         decisions = {}
         for model,model_path in zip(self.models, self.model_paths):
-            unprocessed_keys = [input['key'] for input in inputs]
-            responses = []
+            responses = {}
 
             cache_path = f'{self.cache_dir}/{model.sanitized_model_name}/{self.cache_file}.json'
 
             if self.load_from_cache:
-                cache_keys = [input['key'] for input in inputs]
-                responses, unprocessed_keys = load_llm_responses_from_cache(cache_path, cache_keys)
-
-            prompts = [self.prompt_template.format(**input) for input in inputs if input['key'] in unprocessed_keys]
+                responses, _ = load_llm_responses_from_cache(cache_path, [input['key'] for input in inputs])
 
             logger.info('Voting with %s...', model_path)
-            responses_list = model.invoke(prompts, self.temperature)
-            responses |= {key: response for key,response in zip(unprocessed_keys, responses_list)}
+            pending = [input for input in inputs if input['key'] not in responses]
+            if pending:
+                prompts = [self.prompt_template.format(**input) for input in pending]
+                responses_list = model.invoke(prompts, self.temperature)
+                responses |= {input['key']: response for input,response in zip(pending, responses_list)}
 
             if self.cache_dir is not None:
                 save_llm_responses_to_cache(cache_path, responses)
 
-            parsed = [self.response_parser(response, **self.parser_args) for response in responses.values()]
+            parsed = [self.response_parser(responses[input['key']], **self.parser_args) for input in inputs]
 
             decisions[model_path] = torch.tensor(parsed)
 
