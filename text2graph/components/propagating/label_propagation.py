@@ -126,7 +126,6 @@ class LabelPropagator(Component):
         type_data = data[self.node_type] if isinstance(data, HeteroData) else data
 
         train_mask = type_data[self.label_attribute] != -1
-        unlabeled_node_ids = torch.arange(type_data.num_nodes)[~train_mask]
 
         preds, probs = self.propagate(data, type_data, train_mask)
 
@@ -135,8 +134,8 @@ class LabelPropagator(Component):
 
         propagating_mask = self.propagating_mask if self.propagating_mask is not None else torch.ones(type_data.num_nodes, dtype=torch.bool)
         propagating_mask = (propagating_mask & (~train_mask))
-        for node_id, pred, prob in zip(unlabeled_node_ids, preds[propagating_mask], probs[propagating_mask]):
-            context['label_info'][node_id] = {'source': 'label_propagator', 'prob': prob.item()}
-            type_data[self.label_attribute][node_id] = pred
+        for node_id in torch.nonzero(propagating_mask).flatten().tolist():
+            context['label_info'][node_id] = {'source': 'label_propagator', 'prob': probs[node_id].item()}
+            type_data[self.label_attribute][node_id] = preds[node_id]
 
         return context
