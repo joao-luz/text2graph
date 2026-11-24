@@ -25,15 +25,6 @@ class GroundTruthLabeler(Component):
         if isinstance(true_label_source, str):
             self.str_parameters |= { 'true_label_source': true_label_source }
 
-    def extract_labels(self, data, node_ids):
-        ground_truths = data[self.label_attribute]
-
-        labels = torch.full((data.num_nodes, ), -1)
-        for node_id in node_ids:
-            labels[node_id] = ground_truths[node_id]
-
-        return labels
-    
     def run(self, context):
         data = context['graph']
 
@@ -49,11 +40,11 @@ class GroundTruthLabeler(Component):
         true_labels = context[self.true_label_source] if isinstance(self.true_label_source, str) else self.true_label_source
         labels[label_mask] = true_labels[label_mask]
         
-        if not context.get('pseudo_label_info'):
-            context['pseudo_label_info'] = [{} for _ in range(type_data.num_nodes)]
+        if not context.get('label_info'):
+            context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
-        for id in node_ids:
-            context['pseudo_label_info'][id] = {'source': 'ground_truth', 'prob': 1.0}
+        for node_id in node_ids:
+            context['label_info'][node_id] = {'source': 'ground_truth', 'prob': 1.0}
         
         type_data[self.label_attribute] = labels
 
