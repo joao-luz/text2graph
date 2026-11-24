@@ -128,7 +128,7 @@ class LLMLabeler(Component):
 
         type_data[self.label_attribute] = labels
 
-        if not type_data.get('label_info'):
+        if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
         for node_id in node_ids:
