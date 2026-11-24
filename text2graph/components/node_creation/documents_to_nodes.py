@@ -8,6 +8,29 @@ from torch_geometric.data import Data, HeteroData
 
 @register_component('documents_to_nodes')
 class DocumentsToNodes(Component):
+    """Adds one node per document, usually as a pipeline's first step.
+
+    Each node stores its document in the `text` attribute. If the context has no
+    graph yet, this creates a homogeneous `Data` graph. Otherwise the documents are
+    added as a new node type, and a homogeneous graph is first converted to
+    `HeteroData` (its nodes keep their node type, and its edges become
+    `(type, 'to', type)` edges).
+
+    Adds `node_type` to `context['node_types']` and sets `context['graph']`.
+
+    Args:
+        source: Context key holding the list of document strings.
+        node_type: Name of the new node type.
+        labels: Optional context key holding one label per document (a list or a
+            tensor), stored on the nodes as `labels_attribute`. Usually the ground
+            truth, for evaluation or for `GroundTruthLabeler`.
+        labels_attribute: Node attribute the labels are stored in.
+
+    Raises:
+        KeyError: If `source`, or `labels` when given, isn't in the context.
+        TypeError: If `context['graph']` is neither `None`, `Data` nor `HeteroData`.
+    """
+
     def __init__(self, source='documents', node_type='documents', labels=None, labels_attribute='y'):
         self.source = source
         self.node_type = node_type
