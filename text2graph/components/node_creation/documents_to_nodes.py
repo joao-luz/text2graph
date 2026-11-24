@@ -14,7 +14,7 @@ class DocumentsToNodes(Component):
     graph yet, this creates a homogeneous `Data` graph. Otherwise the documents are
     added as a new node type, and a homogeneous graph is first converted to
     `HeteroData` (its nodes keep their node type, and its edges become
-    `(type, 'to', type)` edges).
+    `(type, 'similar', type)` edges).
 
     Adds `node_type` to `context['node_types']` and sets `context['graph']`.
 

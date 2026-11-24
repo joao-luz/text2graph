@@ -11,6 +11,7 @@ class MLPPropagator(HomogeneousPropagator):
     """
 
     source = 'mlp_propagator'
+    requires_edges = False
 
     def _build_model(self, data, num_classes):
         return MLP(

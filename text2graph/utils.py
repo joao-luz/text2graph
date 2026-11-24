@@ -15,6 +15,7 @@ __all__ = [
     'load_embeddings_from_cache',
     'save_embeddings_to_cache',
     'data_to_hetero',
+    'get_same_type_edges',
 ]
 
 
@@ -86,7 +87,7 @@ def save_embeddings_to_cache(cache_path, embeddings):
     torch.save(embeddings, cache_path)
 
 
-def data_to_hetero(data, node_type='documents'):
+def data_to_hetero(data, node_type='documents', link_name='similar'):
     from torch_geometric.data import HeteroData
 
     hetero = HeteroData()
@@ -100,7 +101,7 @@ def data_to_hetero(data, node_type='documents'):
         node_store[key] = value
 
     if data.edge_index is not None:
-        edge_type = (node_type, 'to', node_type)
+        edge_type = (node_type, link_name, node_type)
 
         hetero[edge_type].edge_index = data.edge_index
 
@@ -111,3 +112,36 @@ def data_to_hetero(data, node_type='documents'):
             hetero[edge_type].edge_weight = data.edge_weight
 
     return hetero
+
+
+def get_same_type_edges(graph, node_type, link_name='similar'):
+    """Return the storage holding the edges between nodes of `node_type`.
+
+    For a homogeneous `Data` graph that's the graph itself. For `HeteroData` it's
+    the edge type `(node_type, link_name, node_type)` with the same source and
+    destination type.
+
+    Args:
+        graph: `Data` or `HeteroData` graph.
+        node_type: Node type whose edges to get.
+        link_name: Relation name of the edge type (`HeteroData` only).
+
+    Returns:
+        The edge storage, with `edge_index` and possibly `edge_attr`.
+
+    Raises:
+        ValueError: If a `HeteroData` graph has no such edge type.
+    """
+    from torch_geometric.data import HeteroData
+
+    if not isinstance(graph, HeteroData):
+        return graph
+
+    edge_type = (node_type, link_name, node_type)
+    if edge_type not in graph.edge_types:
+        raise ValueError(
+            f'No {edge_type} edges in the graph; create them with knn_edge_creator or '
+            f'hetero_knn_edge_creator. Edge types present: {graph.edge_types}'
+        )
+
+    return graph[edge_type]

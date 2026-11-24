@@ -5,7 +5,9 @@ from ..component import Component
 import torch
 import torch.nn.functional as F
 
-from torch_geometric.data import HeteroData
+from torch_geometric.data import Data, HeteroData
+
+from ...utils import get_same_type_edges
 
 
 logger = logging.getLogger(__name__)
@@ -157,27 +159,44 @@ class GNNPropagator(Component):
 class HomogeneousPropagator(GNNPropagator):
     """GNNPropagator over a single node type.
 
-    Works on a homogeneous graph, or on one node type of a HeteroData graph
-    (only that type's features and its own `edge_index` are used).
+    Works on a homogeneous graph, or on one node type of a HeteroData graph. On
+    `HeteroData`, only that type's features and the edges between its own nodes,
+    the `(node_type, edge_link_name, node_type)` edge type, are used.
+
+    `inputs` is a `Data` graph with the node type's features and those edges (or
+    the graph itself, if homogeneous).
 
     Args:
         node_type: Node type whose labels are propagated.
+        edge_link_name: Relation name of the edges to use, on `HeteroData` graphs.
         **kwargs: See `GNNPropagator`.
     """
 
-    def __init__(self, node_type='documents', **kwargs):
+    requires_edges = True
+
+    def __init__(self, node_type='documents', edge_link_name='similar', **kwargs):
         super().__init__(**kwargs)
         self.node_type = node_type
+        self.edge_link_name = edge_link_name
         self.str_parameters['node_type'] = node_type
+        self.str_parameters['edge_link_name'] = edge_link_name
 
     def _prepare(self, context):
         if self.node_type not in context['node_types']:
             raise ValueError(f'"{self.node_type}" not a valid type, only {context["node_types"]}')
 
         data = context['graph']
-        type_data = data[self.node_type] if isinstance(data, HeteroData) else data
+        if not isinstance(data, HeteroData):
+            return data, data
 
-        return type_data, type_data
+        type_data = data[self.node_type]
+
+        inputs = Data(num_nodes=type_data.num_nodes)
+        inputs[self.graph_embedding_attribute] = type_data[self.graph_embedding_attribute]
+        if self.requires_edges:
+            inputs.edge_index = get_same_type_edges(data, self.node_type, self.edge_link_name).edge_index
+
+        return inputs, type_data
 
 
 class HeterogeneousPropagator(GNNPropagator):

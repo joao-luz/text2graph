@@ -2,6 +2,7 @@ import logging
 
 from ..component import Component
 from ..component_registry import register_component
+from ...utils import get_same_type_edges
 
 import torch
 
@@ -52,16 +53,7 @@ class LabelPropagator(Component):
         }
 
     def _get_edge_index_and_weight(self, data, node_type):
-        if isinstance(data, HeteroData):
-            edge_type = (node_type, self.edge_link_name, node_type)
-            if edge_type not in data.edge_types:
-                raise ValueError(
-                    f'No {edge_type} edges found -- label_propagator needs same-type '
-                    f'edges to propagate over (e.g. from hetero_knn_edge_creator).'
-                )
-            edge_store = data[edge_type]
-        else:
-            edge_store = data
+        edge_store = get_same_type_edges(data, node_type, self.edge_link_name)
 
         edge_index = edge_store.edge_index
         edge_weight = edge_store.get(self.edge_attr_attribute)

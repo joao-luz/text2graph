@@ -8,15 +8,17 @@ from torch_geometric.data import HeteroData
 
 @register_component('knn_edge_creator')
 class KNNEdgeCreator(Component):
-    def __init__(self, k, representation_attr='x', node_type='documents'):
+    def __init__(self, k, representation_attr='x', node_type='documents', link_name='similar'):
         self.k = k
         self.representation_attr = representation_attr
         self.node_type = node_type
+        self.link_name = link_name
 
         self.str_parameters = {
             'k': k,
             'representation_attr': representation_attr,
-            'node_type': node_type
+            'node_type': node_type,
+            'link_name': link_name
         }
 
     def run(self, context):
@@ -44,6 +46,9 @@ class KNNEdgeCreator(Component):
         else:
             edge_index = torch.tensor(edge_index_list, dtype=torch.long).t().contiguous()
 
-        type_data.edge_index = edge_index
+        if isinstance(data, HeteroData):
+            data[self.node_type, self.link_name, self.node_type].edge_index = edge_index
+        else:
+            data.edge_index = edge_index
 
         return context
