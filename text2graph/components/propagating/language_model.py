@@ -113,7 +113,7 @@ class LMPropagator(Component):
         preds, probs = self.propagate(type_data, train_mask)
 
         if not context.get('label_info'):
-            context['label_info'] = [{} for _ in range(context.num_nodes)]
+            context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
         for node_id,pred,prob in zip(unlabeled_node_ids, preds[~train_mask], probs[~train_mask]):
             context['label_info'][node_id] = {'source': 'lm_propagator', 'prob': prob.item()}
