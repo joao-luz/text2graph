@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 
 from torch_geometric.data import Data, HeteroData
+from torch_geometric.utils import coalesce
 
 
 @register_component('hetero_knn_edge_creator')
@@ -68,6 +69,12 @@ class HeteroKNNEdgeCreator(Component):
 
         return edge_index, sim_flat.reshape(-1, 1)
 
+    @staticmethod
+    def _add_reverse_edges(edge_index, edge_attr, num_nodes):
+        edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+        edge_attr = torch.cat([edge_attr, edge_attr], dim=0)
+        return coalesce(edge_index, edge_attr, num_nodes=num_nodes, reduce='mean')
+
     def run(self, context):
         data = context['graph']
 
@@ -83,25 +90,27 @@ class HeteroKNNEdgeCreator(Component):
             x_src = getattr(data[src_type], self.representation_attr)
             x_dst = getattr(data[dst_type], self.representation_attr)
 
-            edge_index, edge_attr = self.compute_knn(x_src, x_dst, same_type=(src_type == dst_type))
+            same_type = src_type == dst_type
+            edge_index, edge_attr = self.compute_knn(x_src, x_dst, same_type=same_type)
+
+            if self.rev_link and same_type:
+                edge_index, edge_attr = self._add_reverse_edges(edge_index, edge_attr, x_src.size(0))
 
             data[src_type, self.link_name, dst_type].edge_index = edge_index
             data[src_type, self.link_name, dst_type].edge_attr = edge_attr
 
-            if self.rev_link:
+            if self.rev_link and not same_type:
                 data[dst_type, self.link_name, src_type].edge_index = edge_index.flip(0)
                 data[dst_type, self.link_name, src_type].edge_attr = edge_attr
 
         else:
-            # homogeneous graph: single implicit node type, just add to edge_index
             x_src = getattr(data, self.representation_attr)
             x_dst = x_src
 
             edge_index, edge_attr = self.compute_knn(x_src, x_dst, same_type=True)
 
             if self.rev_link:
-                edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
-                edge_attr = torch.cat([edge_attr, edge_attr], dim=0)
+                edge_index, edge_attr = self._add_reverse_edges(edge_index, edge_attr, x_src.size(0))
 
             existing_edge_index = data.edge_index if data.get('edge_index') is not None else torch.empty((2, 0), dtype=torch.long, device=edge_index.device)
             data.edge_index = torch.cat([existing_edge_index, edge_index], dim=1)
