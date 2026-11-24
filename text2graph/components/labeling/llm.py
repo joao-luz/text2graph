@@ -126,7 +126,10 @@ class LLMLabeler(Component):
         node_ids = torch.nonzero(label_mask).flatten().tolist()
         labels = self.extract_labels(context, type_data, node_ids)
 
-        type_data[self.label_attribute] = labels
+        if type_data.get(self.label_attribute) is None:
+            type_data[self.label_attribute] = torch.full((type_data.num_nodes,), -1)
+
+        type_data[self.label_attribute][label_mask] = labels[label_mask]
 
         if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
