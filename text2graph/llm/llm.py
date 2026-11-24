@@ -187,11 +187,16 @@ class LLM:
         """
         self.loaded = False
 
-    def __del__(self):
-        try:
-            self.unload_model()
-        except Exception:
-            pass
+    def close(self):
+        """Free the model's resources; same as :meth:`unload_model`."""
+        self.unload_model()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
     def invoke(self, prompts, temperature=0.7, sampling_kwargs={}, chat_kwargs={}):
         """Generate a response to each prompt, sent as a single user message.
