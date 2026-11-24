@@ -10,6 +10,39 @@ from torch_geometric.utils import coalesce
 
 @register_component('hetero_knn_edge_creator')
 class HeteroKNNEdgeCreator(Component):
+    """Connects each source node to its `k` most similar destination nodes.
+
+    Similarity is the cosine similarity of the node features, and is stored as each
+    edge's `edge_attr` (shape `[num_edges, 1]`). `k` is lowered to the number of
+    available destination nodes when there are fewer.
+
+    On a `HeteroData` graph, the edges are stored under the edge type
+    `(source_node_type, link_name, destine_node_type)`.
+    With `rev_link`, the reversed edges are also stored under
+    `(destine_node_type, link_name, source_node_type)`. When source and destination
+    are the same node type it holds both directions.
+
+    On a homogeneous `Data` graph, both node types must be the graph's own. The
+    edges are appended to the existing `edge_index` and `edge_attr`.
+
+    Args:
+        k: Number of neighbors per source node.
+        source_node_type: Node type the edges start from.
+        destine_node_type: Node type the edges point to; can be the same as
+            `source_node_type` (nodes are never connected to themselves).
+        link_name: Relation name in the edge type.
+        representation_attr: Node attribute holding the features to compare, on
+            both node types.
+        rev_link: Also add the reversed edges, so messages flow both ways.
+        min_similarity: Optional threshold; edges with a lower similarity are
+            dropped, so nodes can end up with fewer than `k` neighbors.
+
+    Raises:
+        ValueError: If a node type isn't in the graph, there are no destination
+            nodes to connect to, `min_similarity` removes every edge, or (on a
+            homogeneous graph) the existing `edge_attr` has a different width.
+    """
+
     def __init__(self, k, source_node_type, destine_node_type, link_name='similar', representation_attr='x', rev_link=True, min_similarity=None):
         self.k = k
         self.node_type_pair = (source_node_type, destine_node_type)
@@ -27,7 +60,7 @@ class HeteroKNNEdgeCreator(Component):
             'min_similarity': min_similarity
         }
 
-    def compute_knn(self, x_src, x_dst, same_type):
+    def _compute_knn(self, x_src, x_dst, same_type):
         n_src = x_src.size(0)
         n_dst = x_dst.size(0)
 
@@ -38,25 +71,20 @@ class HeteroKNNEdgeCreator(Component):
                 f"(available: {n_dst})."
             )
 
-        # Cosine similarity between every src node and every dst node
         src_norm = F.normalize(x_src, p=2, dim=-1)
         dst_norm = F.normalize(x_dst, p=2, dim=-1)
         sim = src_norm @ dst_norm.t()  # [n_src, n_dst]
 
         if same_type:
-            # avoid connecting a node to itself
             sim.fill_diagonal_(float('-inf'))
 
-        # top-k most similar dst nodes for each src node
-        topk_sim, topk_idx = sim.topk(k, dim=-1, largest=True)  # [n_src, k]
+        topk_sim, topk_idx = sim.topk(k, dim=-1, largest=True)
 
         src_index = torch.arange(n_src, device=x_src.device).view(-1, 1).expand(-1, k).reshape(-1)
         dst_index = topk_idx.reshape(-1)
         sim_flat = topk_sim.reshape(-1)
 
         if self.min_similarity is not None:
-            # Drop weak "nearest" matches instead of always connecting exactly k
-            # neighbors -- avoids meaningless edges when nothing is truly similar.
             keep = sim_flat >= self.min_similarity
             if not keep.any():
                 raise ValueError(
@@ -91,7 +119,7 @@ class HeteroKNNEdgeCreator(Component):
             x_dst = getattr(data[dst_type], self.representation_attr)
 
             same_type = src_type == dst_type
-            edge_index, edge_attr = self.compute_knn(x_src, x_dst, same_type=same_type)
+            edge_index, edge_attr = self._compute_knn(x_src, x_dst, same_type=same_type)
 
             if self.rev_link and same_type:
                 edge_index, edge_attr = self._add_reverse_edges(edge_index, edge_attr, x_src.size(0))
@@ -107,7 +135,7 @@ class HeteroKNNEdgeCreator(Component):
             x_src = getattr(data, self.representation_attr)
             x_dst = x_src
 
-            edge_index, edge_attr = self.compute_knn(x_src, x_dst, same_type=True)
+            edge_index, edge_attr = self._compute_knn(x_src, x_dst, same_type=True)
 
             if self.rev_link:
                 edge_index, edge_attr = self._add_reverse_edges(edge_index, edge_attr, x_src.size(0))

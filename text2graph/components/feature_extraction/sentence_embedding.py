@@ -16,6 +16,42 @@ logger = logging.getLogger(__name__)
 
 @register_component('sentence_embedding_extractor')
 class SentenceEmbeddingExtractor(Component):
+    """Embeds each node's text with a sentence-transformers model.
+
+    The embeddings are L2-normalized, so dot products between them are cosine
+    similarities. They're stored as `graph_embedding_attribute` on each node type
+    in `node_types`, as a float tensor on the CPU.
+
+    Args:
+        model: `SentenceTransformer` instance to use. Its name is taken from
+            `model.model_card_data.base_model`.
+        model_path: Used instead of `model`: name or path of a model, loaded with
+            `SentenceTransformer(model_path)` the first time it's needed (not when
+            everything comes from the cache). Pass either `model` or `model_path`.
+        graph_embedding_attribute: Node attribute the embeddings are stored in.
+        texts_attribute: Node attribute holding the texts to embed.
+        prompt: Optional prompt prepended to every text, for models trained with
+            instructions (passed to `SentenceTransformer.encode`).
+        node_types: Node type, or list of node types, to embed.
+        unload_model: Free the model and GPU memory after this step.
+        max_seq_length: Maximum tokens per text, longer texts are truncated. Capped
+            at the model's own limit.
+        cache_dir: Directory for cached embeddings, saved to
+            `{cache_dir}/{model name}/{cache_file or node_type}.pt` whenever this
+            is set. `None` disables caching.
+        cache_file: Cache file name, without `.pt`. Defaults to the node type. It's
+            used for every node type in `node_types`, so leave it unset when
+            embedding several node types.
+        load_from_cache: Load embeddings from the cache file when it exists instead
+            of computing them. The cache is only checked for having one row per
+            text, not for matching texts, so delete it when the texts change.
+
+    Raises:
+        ValueError: If neither `model` nor `model_path` is given; when running, if
+            a node type isn't in the graph, or cached embeddings don't have one row
+            per text.
+    """
+
     def __init__(
             self,
             model=None,
@@ -68,7 +104,7 @@ class SentenceEmbeddingExtractor(Component):
             'load_from_cache': load_from_cache
         }
 
-    def compute_representations(self, texts):
+    def _compute_representations(self, texts):
         return self.model.encode(
             texts, 
             convert_to_tensor=True, 
@@ -78,7 +114,7 @@ class SentenceEmbeddingExtractor(Component):
             show_progress_bar=True
         ).to(torch.float).cpu().clone()
 
-    def compute_cached_representations(self, node_type, texts):
+    def _compute_cached_representations(self, node_type, texts):
         cache_path = f'{self.cache_dir}/{self.sanitized_model_name}/{self.cache_file or node_type}.pt'
 
         if self.load_from_cache:
@@ -95,13 +131,10 @@ class SentenceEmbeddingExtractor(Component):
 
         self.model = self.model or SentenceTransformer(self.model_path)
 
-        # Never raise max_seq_length past what the model actually supports -- some models
-        # (e.g. small BERT-based encoders) silently error out on sequences past their real
-        # position embedding limit, even though max_seq_length itself just controls truncation.
         native_max_seq_length = self.model.max_seq_length
         self.model.max_seq_length = min(self.max_seq_length, native_max_seq_length)
 
-        embeddings = self.compute_representations(texts)
+        embeddings = self._compute_representations(texts)
 
         if self.cache_dir is not None:
             save_embeddings_to_cache(cache_path, embeddings)
@@ -120,7 +153,7 @@ class SentenceEmbeddingExtractor(Component):
             else:
                 type_data = data
 
-            type_data[self.graph_embedding_attribute] = self.compute_cached_representations(node_type, type_data[self.texts_attribute])
+            type_data[self.graph_embedding_attribute] = self._compute_cached_representations(node_type, type_data[self.texts_attribute])
 
         if self.unload_model and self.model is not None:
             del self.model
