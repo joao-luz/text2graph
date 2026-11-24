@@ -13,6 +13,24 @@ def _qualified_name(cls):
 
 
 def register_component(name):
+    """Class decorator that makes a component usable in pipeline configs under `name`.
+
+    The class is registered when its module is imported, so import custom
+    components before building a `Pipeline` from a config::
+
+        @register_component('my_labeler')
+        class MyLabeler(Component):
+            ...
+
+    If `name` is already taken by a different class, a warning is logged and the
+    new class replaces the old one.
+
+    Args:
+        name: Name used as a step's `name` in configs.
+
+    Returns:
+        The decorator, which returns the class unchanged.
+    """
     def wrapper(cls):
         existing = COMPONENTS.get(name)
         if existing is not None and _qualified_name(existing) != _qualified_name(cls):
@@ -29,6 +47,12 @@ def register_component(name):
 
 def get_component(name):
     """Return the component class registered under `name`.
+
+    Args:
+        name: Name the class was registered under with `register_component`.
+
+    Returns:
+        The component class (not an instance).
 
     Raises:
         ValueError: If no component is registered under `name`. The message suggests
