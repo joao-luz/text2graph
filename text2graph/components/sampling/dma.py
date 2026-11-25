@@ -16,20 +16,6 @@ from torch_geometric.data import HeteroData
 from transformers import AutoModel, AutoTokenizer
 
 
-def _sparse_tensor_class():
-    # torch_sparse is optional: only DMASampler needs it, so import it on first use.
-    try:
-        from torch_sparse import SparseTensor
-    except ImportError as e:
-        raise ImportError(
-            'DMASampler requires "torch_sparse", which is not installed. Install the build '
-            'matching your torch and CUDA versions, see '
-            'https://github.com/rusty1s/pytorch_sparse#installation'
-        ) from e
-
-    return SparseTensor
-
-
 # Originaly written in C++, ported to Python https://github.com/PKU-DAIR/Noisy-LLM-Oracle/blob/main/src/lib/cpp_extension/utils.cpp
 def get_max_reliable_influ_node(high_score_nodes, activated_node, reliability_list, th, adj_rowptr, adj_col, adj_value, is_first):
     num_node = reliability_list.size(0)
@@ -191,22 +177,28 @@ def normalize_adj(edge_index, num_nodes, edge_weight=None):
     return edge_index, edge_weight
 
 
+def _sparse_adjacency(edge_index, edge_weight, num_nodes):
+    # Duplicate edges are merged, with their weights summed.
+    return torch.sparse_coo_tensor(edge_index, edge_weight, (num_nodes, num_nodes), check_invariants=True).coalesce()
+
+
+def _csr(adj):
+    csr = adj.to_sparse_csr()
+    return csr.crow_indices(), csr.col_indices(), csr.values()
+
+
 def compute_adj2(edge_index, num_nodes):
     n_edge_index, n_edge_weight = compute_rw_norm_edge_index(edge_index, num_nodes=num_nodes)
-    adj = _sparse_tensor_class()(row=n_edge_index[0], col=n_edge_index[1], value=n_edge_weight,
-                       sparse_sizes=(num_nodes, num_nodes))
-    return adj
+    return _sparse_adjacency(n_edge_index, n_edge_weight, num_nodes)
 
 
 def compute_norm_aax(x, edge_index, num_nodes):
     new_edge_index, new_edge_weight = compute_rw_norm_edge_index(edge_index, num_nodes=num_nodes)
-    adj = _sparse_tensor_class()(row=new_edge_index[0], col=new_edge_index[1], value=new_edge_weight,
-                       sparse_sizes=(num_nodes, num_nodes))
-    aax = adj.matmul(x)
-    aax = adj.matmul(aax)
-    x = aax.to_dense()
+    adj = _sparse_adjacency(new_edge_index, new_edge_weight, num_nodes)
+    aax = torch.sparse.mm(adj, x)
+    aax = torch.sparse.mm(adj, aax)
 
-    return x
+    return aax
 
 
 def compute_sim(norm_aax, num_nodes):
@@ -236,7 +228,7 @@ def dma(
     activated_nodes = activated_nodes if activated_nodes is not None else torch.ones(total_node_number)
 
     adj_matrix2 = compute_adj2(edge_index, total_node_number)
-    adj_rowptr, adj_col, adj_value = adj_matrix2.csr()
+    adj_rowptr, adj_col, adj_value = _csr(adj_matrix2)
     norm_aax = compute_norm_aax(features, edge_index, total_node_number)
     similarity_feature = norm_aax
 
@@ -352,8 +344,6 @@ class DMASampler(Component):
         ):
         if model is None and model_path is None:
             raise ValueError('Either pass a model or a model path')
-
-        _sparse_tensor_class()  # fail now, before loading any model, if torch_sparse is missing
 
         self.model = model if model else load_llm(model_path)
         model_path = self.model.model_name
