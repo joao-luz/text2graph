@@ -8,8 +8,8 @@ from sklearn.cluster import KMeans
 from torch_geometric.data import HeteroData
 
 
-def kmeans_sample(embeddings, k):
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(embeddings.numpy())
+def _kmeans_sample(embeddings, k, random_state=42):
+    kmeans = KMeans(n_clusters=k, random_state=random_state, n_init=10).fit(embeddings.numpy())
             
     sampled_indices = []
     for center in kmeans.cluster_centers_:
@@ -22,18 +22,20 @@ def kmeans_sample(embeddings, k):
 
 @register_component('kmeans_sampler')
 class KMeansSampler(Component):
-    def __init__(self, n=100, node_type='documents', representation_attr='x', mask_name='to_label', label_attribute='pseudo_y'):
+    def __init__(self, n=100, node_type='documents', representation_attr='x', mask_name='to_label', label_attribute='pseudo_y', random_state=42):
         self.node_type = node_type
         self.representation_attr = representation_attr
         self.n = n
         self.mask_name = mask_name
         self.label_attribute = label_attribute
+        self.random_state = random_state
 
         self.str_parameters = {
             'n': n,
             'representation_attr': representation_attr,
             'node_type': node_type,
             'mask_name': mask_name,
+            'random_state': random_state,
         }
 
     def run(self, context):
@@ -52,7 +54,7 @@ class KMeansSampler(Component):
         candidate_ids = torch.nonzero(mask).flatten()
         embeddings = type_data[self.representation_attr][candidate_ids]
 
-        sampled_indices = candidate_ids[kmeans_sample(embeddings, self.n)]
+        sampled_indices = candidate_ids[_kmeans_sample(embeddings, self.n, random_state=self.random_state)]
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
         mask[sampled_indices] = True
 
