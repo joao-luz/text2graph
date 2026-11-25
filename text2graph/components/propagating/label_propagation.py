@@ -22,6 +22,31 @@ class LabelPropagator(Component):
     Set `alpha` (in (0, 1)) to use the softer Label Spreading variant instead
     (Zhou et al., 2004), which blends propagated and original labels at every
     step rather than hard-clamping labeled nodes back exactly.
+
+    Each unlabeled node gets its most likely label, with that probability in its
+    `label_info` entry (`{'source': 'label_propagator', 'prob': ...}`). A node no
+    label reaches, e.g. one without outgoing edges, stays unlabeled (-1) and gets
+    no `label_info` entry.
+
+    Args:
+        node_type: Node type to label.
+        label_attribute: Node attribute holding the labels (-1 for unlabeled);
+            predictions are written into it.
+        edge_link_name: Relation name of the edges to use, on `HeteroData` graphs.
+        edge_attr_attribute: Edge attribute holding edge weights; edges without it
+            have weight 1.
+        max_iter: Maximum number of propagation steps. A warning is logged if the
+            labels haven't converged by then.
+        tol: Convergence threshold: stop once no label probability changes by more
+            than this in a step.
+        alpha: `None` for Label Propagation; a value in (0, 1) for Label Spreading,
+            the weight of the propagated labels against the original ones.
+        propagating_mask: Optional boolean mask over the nodes; only unlabeled nodes
+            inside it receive a predicted label (None means all of them).
+
+    Raises:
+        ValueError: If `node_type` isn't in the graph, or (on `HeteroData`) has no
+            edges between its own nodes.
     """
 
     def __init__(
@@ -65,7 +90,7 @@ class LabelPropagator(Component):
 
         return edge_index, edge_weight
 
-    def propagate(self, data, type_data, train_mask):
+    def _propagate(self, data, type_data, train_mask):
         num_nodes = type_data.num_nodes
 
         edge_index, edge_weight = self._get_edge_index_and_weight(data, self.node_type)
@@ -122,7 +147,7 @@ class LabelPropagator(Component):
 
         train_mask = type_data[self.label_attribute] != -1
 
-        preds, probs = self.propagate(data, type_data, train_mask)
+        preds, probs = self._propagate(data, type_data, train_mask)
 
         if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]

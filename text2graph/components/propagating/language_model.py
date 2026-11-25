@@ -10,6 +10,31 @@ from torch_geometric.data import HeteroData
 
 @register_component('lm_propagator')
 class LMPropagator(Component):
+    """Labels the unlabeled nodes with a text classifier fine-tuned on the labeled ones.
+
+    Fine-tunes a Hugging Face sequence-classification model on the `text` of the
+    nodes that have a label, then predicts a label for every node.
+
+    Training runs through `transformers.Trainer`, which writes to
+    `./lm_propagator_results` in the working directory. Each node labeled here
+    gets a `label_info` entry `{'source': 'lm_propagator', 'prob': softmax probability}`.
+
+    Args:
+        model_path: Hugging Face model name or path, loaded with
+            `AutoModelForSequenceClassification` (a new classification head is
+            added for the classes found among the labeled nodes).
+        epochs: Number of training epochs.
+        lr: Learning rate.
+        batch_size: Training batch size per device.
+        max_length: Maximum tokens per text; longer texts are truncated.
+        node_type: Node type to label; its nodes need a `text` attribute.
+        label_attribute: Node attribute holding the labels (-1 for unlabeled);
+            predictions are written into it.
+
+    Raises:
+        ValueError: If `node_type` isn't in the graph.
+    """
+
     def __init__(
         self,
         model_path,
