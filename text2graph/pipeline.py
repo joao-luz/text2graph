@@ -185,6 +185,49 @@ class Pipeline:
         """
         return cls(config=config, verbose=verbose, **context_kwargs)
 
+    @classmethod
+    def from_yaml(cls, path, verbose=True, **context_kwargs):
+        """Build a pipeline from a YAML file holding a config.
+
+        The file holds the same mapping as `Pipeline.from_config` takes, a `steps`
+        list of components with their parameters:
+
+            steps:
+              - name: documents_to_nodes
+              - name: kmeans_sampler
+                parameters:
+                  n: 50
+              - name: llm_labeler
+                parameters:
+                  model: ${llm}
+                  prompt_template: ${prompt}
+                  label_map: ${classes}
+
+        In YAML, quote strings that start with `{`, or they're read as mappings:
+        write `'{text}'`, not `{text}`.
+
+        Args:
+            path: Path to the YAML file.
+            verbose: See `Pipeline`.
+            **context_kwargs: Initial context, as for `Pipeline.from_config`.
+
+        Returns:
+            The `Pipeline`.
+
+        Raises:
+            ValueError: If the file doesn't hold a mapping with a `steps` list, or
+                the config is invalid (see `Pipeline.from_config`).
+        """
+        import yaml
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        if not isinstance(config, Mapping):
+            raise ValueError(f'"{path}" must contain a YAML mapping with a "steps" list.')
+
+        return cls.from_config(config, verbose=verbose, **context_kwargs)
+
     def __str__(self):
         steps_str = '\n'.join(['\t' + line for line in ',\n'.join([str(step) for step in self.steps]).split('\n')])
         return 'Pipeline(steps=[\n' + steps_str + '\n])'
