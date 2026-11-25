@@ -329,6 +329,40 @@ def generate_similarities(model, pseudo_samples, label_embedding_path=None):
 
 @register_component('dma_sampler')
 class DMASampler(Component):
+    """Picks nodes to label with DMA: nodes that cover much of the graph and whose
+    labels are likely to be reliable.
+    Adapted from https://github.com/PKU-DAIR/Noisy-LLM-Oracle
+
+    Meant to be run repeatedly, alternating with a labeler (e.g. inside a
+    `repeat_component`): each run picks the next batch, continuing from the
+    reliability scores and coverage it keeps in `context['dma_reliability_list']`
+    and `context['dma_activated_nodes']`.
+
+    The picked nodes are added to `context[mask_name]`: if that mask already
+    exists, the new nodes are OR-ed into it, so it accumulates over runs.
+
+    Needs `context['classes']`. The LLM writes one example per class, which is then
+    embedded with the same LLM (`LLM.embed`), so the model must support embeddings.
+
+    Args:
+        prompt_template: Prompt asking for an example of a class, with a
+            `{category}` field, which is filled with each class id.
+        model: `LLM` instance.
+        model_path: Used instead of `model`: anything `load_llm` accepts. Pass
+            either `model` or `model_path`.
+        n: Most nodes to pick per run, or a float for a fraction of the node
+            type's nodes. Required in practice: the default `None` fails.
+        node_type: Node type to sample from.
+        mask_name: Context key of the mask the picked nodes are added to.
+        label_attribute: Node attribute telling labeled nodes (not -1) apart.
+        graph_embedding_attribute: Node attribute holding the node features.
+        pseudo_sample_cache_dir: Optional directory to cache the class examples in.
+        label_embedding_cache_dir: Optional directory to cache their embeddings in.
+
+    Raises:
+        ValueError: If neither `model` nor `model_path` is given; when running, if
+            `node_type` isn't in the graph.
+    """
     def __init__(
             self, 
             prompt_template,
