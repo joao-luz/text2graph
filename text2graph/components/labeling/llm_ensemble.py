@@ -16,6 +16,55 @@ logger = logging.getLogger(__name__)
 
 @register_component('llm_ensemble_labeler')
 class LLMEnsembleLabeler(Component):
+    """Labels the sampled nodes by asking several LLMs and combining their votes.
+
+    Each model labels every sampled node like `LLMLabeler` does (same prompts,
+    parsing and caching, with one cache file per model), one model at a time.
+    `resolver` then combines the votes into one label per node.
+
+    Only the sampled nodes' labels change; other nodes keep theirs. Each sampled
+    node gets a `label_info` entry with `source` (the ensemble's models and
+    threshold), `decisions` (each model's vote, by model name) and `prob` (from
+    the resolver; for majority vote, the share of models that agreed).
+
+    Args:
+        prompt_template: See `LLMLabeler`.
+        label_map: See `LLMLabeler`.
+        models: List of `LLM` instances.
+        model_paths: Used instead of `models`: list of anything `load_llm` accepts.
+            Pass either `models` or `model_paths`.
+        mask_name: See `LLMLabeler`.
+        node_type: See `LLMLabeler`.
+        label_attribute: Node attribute the labels are written to (created, all
+            -1, if missing).
+        resolver: How the votes are combined:
+
+            - `'majority_vote'` (default): the most common vote (ties go to the
+              smallest class id), with the share of models that cast it as `prob`.
+            - A function `resolver(decisions) -> (preds, probs)`, where `decisions`
+              maps each model name to a tensor of its votes on the sampled nodes,
+              and `preds` uses -1 for nodes left unlabeled.
+
+        threshold: For `'majority_vote'`: nodes whose majority has a smaller share
+            of the votes are left unlabeled (-1). `None` labels every node.
+        concatenate_decisions_to_x: Not used yet.
+        decision_features_attribute: Not used yet.
+        input_builder: See `LLMLabeler`.
+        response_parser: See `LLMLabeler`.
+        parser_args: See `LLMLabeler`.
+        temperature: See `LLMLabeler`.
+        unload_model: Unload each model right after it has voted, so only one is in
+            GPU memory at a time.
+        cache_dir: See `LLMLabeler`; each model has its own subdirectory.
+        cache_file: See `LLMLabeler`.
+        load_from_cache: See `LLMLabeler`.
+
+    Raises:
+        ValueError: If neither `models` nor `model_paths` is given; when running, if
+            `node_type` isn't in the graph, or no node is labeled (e.g. because
+            no majority reaches `threshold`).
+    """
+
     def __init__(self,
         prompt_template,
         label_map,
@@ -110,12 +159,14 @@ class LLMEnsembleLabeler(Component):
         }
 
     def set_prompt_template(self, new_template):
+        """Replace the prompt template used for the next runs."""
         self.prompt_template = new_template
 
     def set_parser_args(self, new_args):
+        """Replace the extra keyword arguments passed to `response_parser`."""
         self.parser_args = new_args
 
-    def extract_labels(self, context, type_data, node_ids):
+    def _extract_labels(self, context, type_data, node_ids):
         inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
 
         decisions = {}
@@ -178,7 +229,7 @@ class LLMEnsembleLabeler(Component):
 
         label_mask = context[self.mask_name]
         node_ids = torch.nonzero(label_mask).flatten().tolist()
-        preds, probs, decisions = self.extract_labels(context, type_data, node_ids)
+        preds, probs, decisions = self._extract_labels(context, type_data, node_ids)
 
         if type_data.get(self.label_attribute) is None:
             type_data[self.label_attribute] = torch.full((type_data.num_nodes,), -1)

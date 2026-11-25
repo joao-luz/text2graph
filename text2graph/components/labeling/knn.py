@@ -9,6 +9,42 @@ from torch_geometric.data import HeteroData
 
 @register_component('knn_labeler')
 class KNNLabeler(Component):
+    """Labels target nodes by a majority vote of their most similar labeled nodes.
+
+    For each target node, the `k` most similar labeled source nodes (by cosine
+    similarity of `representation_attr`) vote with their labels. If the most common
+    label gets at least a `threshold` share of the votes, the node takes it;
+    otherwise it stays unlabeled.
+
+    Only the target nodes' labels change; other nodes keep theirs. Each newly
+    labeled node gets a `label_info` entry `{'source': 'knn_labeler', 'prob':
+    vote share}`.
+
+    Args:
+        k: Number of neighbors that vote. Lowered to the number of labeled source
+            nodes when there are fewer.
+        target_node_type: Node type to label.
+        source_node_types: Node types whose labeled nodes vote. Defaults to every
+            node type except `target_node_type`, or, if there are no others (e.g.
+            on a homogeneous graph), to `target_node_type` itself. Target nodes
+            never vote on their own label.
+        label_attribute: Node attribute of the target nodes the labels are written
+            to (created, all -1, if missing).
+        source_label_attribute: Node attribute holding the source nodes' labels;
+            nodes with -1 don't vote. Defaults to `label_attribute`, so votes come
+            from labels assigned in the pipeline (not from ground truth, unless
+            set to e.g. `'y'`).
+        representation_attr: Node attribute holding the features to compare, on
+            both target and source node types.
+        threshold: Minimum share of the `k` votes the majority label needs, from
+            0 to 1.
+        mask_name: Optional context key of a boolean mask selecting the target
+            nodes. Defaults to the target nodes that are still unlabeled.
+
+    Raises:
+        ValueError: If a node type isn't in the graph, or no source node is labeled.
+    """
+
     def __init__(self,
         k,
         target_node_type,
@@ -37,7 +73,7 @@ class KNNLabeler(Component):
             'threshold': threshold
         }
 
-    def compute_labels(self, target_data, target_ids, source_reps, source_labels):
+    def _compute_labels(self, target_data, target_ids, source_reps, source_labels):
         x_target = getattr(target_data, self.representation_attr)[target_ids]
 
         target_norm = F.normalize(x_target, p=2, dim=-1)
@@ -110,7 +146,7 @@ class KNNLabeler(Component):
         if source_labels.size(0) == 0:
             raise ValueError('No labeled source nodes found to compute KNN labels from.')
 
-        preds, probs = self.compute_labels(target_data, target_ids, source_reps, source_labels)
+        preds, probs = self._compute_labels(target_data, target_ids, source_reps, source_labels)
 
         if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(target_data.num_nodes)]

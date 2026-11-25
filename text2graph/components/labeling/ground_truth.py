@@ -8,6 +8,24 @@ from torch_geometric.data import HeteroData
 
 @register_component('ground_truth_labeler')
 class GroundTruthLabeler(Component):
+    """Labels the sampled nodes with their true labels.
+
+    Replaces `label_attribute` on `node_type`: nodes in the sample mask get their
+    true label, all others -1 (unlabeled). Adds a `label_info` entry
+    `{'source': 'ground_truth', 'prob': 1.0}` for each labeled node.
+
+    Args:
+        sample_mask_name: Context key of the boolean mask of nodes to label, e.g.
+            set by a sampler.
+        node_type: Node type to label.
+        true_label_source: Context key holding the true labels, or the labels
+            themselves; a tensor with one label per node.
+        label_attribute: Node attribute the labels are written to.
+
+    Raises:
+        ValueError: If `node_type` isn't in the graph.
+    """
+
     def __init__(self, sample_mask_name='to_label', node_type='documents', true_label_source='labels', label_attribute='pseudo_y'):
         super().__init__()
 

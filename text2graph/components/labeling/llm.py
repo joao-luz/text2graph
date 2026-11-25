@@ -16,6 +16,55 @@ logger = logging.getLogger(__name__)
 
 @register_component('llm_labeler')
 class LLMLabeler(Component):
+    """Labels the sampled nodes by asking an LLM to classify each one.
+
+    For each node in the sample mask, `input_builder` makes an input dict, the
+    prompt is `prompt_template.format(**input)`, and `response_parser` turns the
+    LLM's response into a class id.
+
+    Only the sampled nodes' labels change; other nodes keep theirs, e.g. labels
+    from earlier steps. Each sampled node gets a `label_info` entry
+    `{'source': model name, 'prob': 1.0}`.
+
+    Args:
+        prompt_template: Prompt with `str.format` fields filled from each input dict
+            (by default, `{text}`). Literal braces must be doubled: `{{` and `}}`.
+        label_map: Mapping of class ids to class names. Passed to
+            `response_parser` as `options`.
+        model: `LLM` instance to label with.
+        model_path: Used instead of `model`: anything `load_llm` accepts, e.g. a
+            model name. Pass either `model` or `model_path`.
+        mask_name: Context key of the boolean mask of nodes to label, e.g. set by
+            a sampler.
+        node_type: Node type to label.
+        label_attribute: Node attribute the labels are written to (created, all
+            -1, if missing).
+        input_builder: Function `input_builder(context, node_type, node_id) -> dict`.
+            The dict fills `prompt_template` and needs a `key`, unique per node, used
+            as its cache key. The default gives `{'text': ..., 'key': node_id}`, with
+            the node's text cut to about its first 1200 words.
+        response_parser: Function `response_parser(response, options, **parser_args)`
+            returning a class id. The default takes the first integer in the
+            response, and falls back to 0 when there is none or it's not below
+            `len(options)`; a response it can't parse silently becomes class 0.
+        parser_args: Extra keyword arguments for `response_parser`.
+        temperature: Sampling temperature passed to `LLM.invoke`.
+        unload_model: Unload the model after this step, to free GPU memory for the
+            next one.
+        cache_dir: Directory for cached responses, saved to
+            `{cache_dir}/{model.sanitized_model_name}/{cache_file}.json`, keyed by
+            each input's `key`, whenever this is set. `None` disables caching.
+            With the default keys (node ids), use a separate directory per dataset.
+        cache_file: Cache file name, without `.json`.
+        load_from_cache: Reuse cached responses for nodes whose `key` is in the
+            cache, and only prompt the LLM for the rest. A cached response is
+            reused even if the prompt has changed since it was saved.
+
+    Raises:
+        ValueError: If neither `model` nor `model_path` is given; when running, if
+            `node_type` isn't in the graph.
+    """
+
     def __init__(self,
         prompt_template,
         label_map,
@@ -86,7 +135,7 @@ class LLMLabeler(Component):
             'temperature': temperature
         }
 
-    def extract_labels(self, context, type_data, node_ids):        
+    def _extract_labels(self, context, type_data, node_ids):
         inputs = [self.input_builder(context, self.node_type, node_id) for node_id in node_ids]
         responses = {}
 
@@ -124,7 +173,7 @@ class LLMLabeler(Component):
 
         label_mask = context[self.mask_name]
         node_ids = torch.nonzero(label_mask).flatten().tolist()
-        labels = self.extract_labels(context, type_data, node_ids)
+        labels = self._extract_labels(context, type_data, node_ids)
 
         if type_data.get(self.label_attribute) is None:
             type_data[self.label_attribute] = torch.full((type_data.num_nodes,), -1)
