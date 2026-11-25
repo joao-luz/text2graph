@@ -1,3 +1,10 @@
+"""Pipeline components, grouped by what they do, plus the `Component` base class
+and the registry that lets configs refer to components by name.
+
+Every component class is importable from here, e.g.
+`from text2graph.components import GCNPropagator`.
+"""
+
 from .component import Component, RepeatComponent
 from .component_registry import register_component, get_component
 
