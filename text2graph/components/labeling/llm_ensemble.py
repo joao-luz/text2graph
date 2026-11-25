@@ -153,7 +153,9 @@ class LLMEnsembleLabeler(Component):
             probs_full[node_id] = probs[i]
 
         if not torch.any(preds_full != -1):
-            raise ValueError(f'No nodes labeled with at least {self.threshold:.2f} agreement between ensemble models.')
+            if self.threshold:
+                raise ValueError(f'No nodes labeled with at least {self.threshold:.2f} agreement between ensemble models.')
+            raise ValueError(f'The resolver left all {len(node_ids)} sampled nodes unlabeled (-1).')
 
         decisions_full = {}
         for model_path in self.model_paths:
