@@ -49,9 +49,10 @@ class KMeansSampler(Component):
         else:
             mask = torch.ones(type_data.num_nodes, dtype=torch.bool)
 
-        embeddings = type_data[self.representation_attr][mask]
+        candidate_ids = torch.nonzero(mask).flatten()
+        embeddings = type_data[self.representation_attr][candidate_ids]
 
-        sampled_indices = kmeans_sample(embeddings, self.n)
+        sampled_indices = candidate_ids[kmeans_sample(embeddings, self.n)]
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
         mask[sampled_indices] = True
 
