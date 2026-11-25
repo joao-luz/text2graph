@@ -26,7 +26,7 @@ class Component:
 
     To write one, subclass this, implement `run`, and set `self.str_parameters` in
     the constructor: it's what `str(component)` shows, and the pipeline logs it.
-    Register the class with `register_component` to use it in pipeline configs::
+    Register the class with `register_component` to use it in pipeline configs:
 
         @register_component('drop_short_documents')
         class DropShortDocuments(Component):
@@ -62,7 +62,7 @@ class Component:
 class RepeatComponent(Component):
     """Runs a list of steps `n` times in a row.
 
-    In a config, the nested `steps` are written like the pipeline's own::
+    In a config, the nested `steps` are written like the pipeline's own:
 
         {'name': 'repeat_component',
          'parameters': {

@@ -1,0 +1,7 @@
+# Edge creation
+
+::: text2graph.components.edge_creation
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+

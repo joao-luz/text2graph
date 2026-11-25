@@ -94,13 +94,13 @@ class Pipeline:
 
     Every step receives a shared `context` dict and returns it, usually after adding
     to it or changing the graph in it (see `Component`). The context starts out
-    as the keyword arguments given here and to `run`::
+    as the keyword arguments given here and to `run`:
 
         pipeline = Pipeline([DocumentsToNodes(), SentenceEmbeddingExtractor(model_path='...'), ...])
         context = pipeline.run(documents=texts)
 
     The steps can also be built from a config dict, by passing `config` instead
-    of `steps` (or with `Pipeline.from_config`, which documents the format)::
+    of `steps` (or with `Pipeline.from_config`, which documents the format):
 
         pipeline = Pipeline(config=config, llms=llms, dataset='r8')
 
@@ -141,7 +141,7 @@ class Pipeline:
         """Build a pipeline whose steps are described by a config dict.
 
         Same as `Pipeline(config=config, ...)`. Each step names a registered component (see `register_component`) and
-        the keyword arguments to build it with::
+        the keyword arguments to build it with:
 
             config = {'steps': [
                 {'name': 'documents_to_nodes',

@@ -16,7 +16,7 @@ def register_component(name):
     """Class decorator that makes a component usable in pipeline configs under `name`.
 
     The class is registered when its module is imported, so import custom
-    components before building a `Pipeline` from a config::
+    components before building a `Pipeline` from a config:
 
         @register_component('my_labeler')
         class MyLabeler(Component):

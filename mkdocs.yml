@@ -1,0 +1,68 @@
+site_name: text2graph
+site_url: https://joao-luz.github.io/text2graph/
+site_description: Build graphs from text and label their nodes with LLMs and graph models.
+repo_url: https://github.com/joao-luz/text2graph
+repo_name: joao-luz/text2graph
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - API reference:
+      - Pipeline: reference/pipeline.md
+      - Components:
+          - Base classes: reference/components.md
+          - Node creation: reference/node_creation.md
+          - Feature extraction: reference/feature_extraction.md
+          - Edge creation: reference/edge_creation.md
+          - Sampling: reference/sampling.md
+          - Labeling: reference/labeling.md
+          - Propagating: reference/propagating.md
+      - GNN models: reference/gnn.md
+      - LLMs: reference/llm.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: [.]
+      check_paths: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            docstring_options:
+              warn_missing_types: false
+            docstring_section_style: list
+            members_order: source
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            show_signature_annotations: false
+            separate_signature: true
+            merge_init_into_class: true
+            filters: ["!^_"]
+            heading_level: 2

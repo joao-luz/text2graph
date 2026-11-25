@@ -1,77 +1,156 @@
-# Text2Graph Pipeline
+# text2graph
 
-This is a unified pipeline for solving text classification problems via graphs with no labeled instances and using an LLM for pseudo-labeling.
+A unified pipeline for text classification through graphs, for when there are no
+labeled examples: an LLM labels a few documents, and graph models spread those
+labels to the rest.
 
+A `Pipeline` runs a sequence of components over a shared context dict. A typical
+pipeline turns documents into nodes, embeds them, connects similar ones, picks a
+few to label with one or several LLMs, and propagates those labels to the rest of
+the graph with a GNN.
+
+<!-- --8<-- [start:install] -->
 ## Installation
 
-To install the package, first create a virtual environment:
+Straight from GitHub:
 
-```
-python3 -m venv .venv
-```
-
-Go into the root of the repository and run:
-
-```
-pip install . -f https://data.pyg.org/whl/torch-<torch_version>+<cuda_version>.html
+```bash
+pip install "git+https://github.com/joao-luz/text2graph.git"
 ```
 
-Notice that this package makes use of [torch-geometric](https://pytorch-geometric.readthedocs.io/en/latest/) and its additional libraries. Thus, to correctly install them, the extra wheel information is passed via the `-f` argument during `pip install`. To figure out the correct wheel link to use in your case, look into torch-geometric's [official instructions](https://pytorch-geometric.readthedocs.io/en/2.4.0/install/installation.html).
+Or from a clone of the repository, in its root:
 
-## Running the example
-
-To run the (currently single) example script, go into the `examples/` dir and run:
-
-```
-cd src
-python3 run_pipeline.py
+```bash
+git clone https://github.com/joao-luz/text2graph.git
+cd text2graph
+pip install .
 ```
 
-This example runs many pipelines and datasets defined by `.yaml` files in `examples/configs/`. Pipeline and dataset configurations may be set using `.yaml` files. For datasets, you must define a file with the following attributes:
+The LLM backends are optional extras:
+
+```bash
+pip install ".[vllm]"        # local models with vLLM (needs a GPU)
+pip install ".[openai]"      # OpenAI or any OpenAI-compatible server
+pip install ".[anthropic]"   # Anthropic
+```
+
+With an install from GitHub, add them like this:
+
+```bash
+pip install "text2graph[openai] @ git+https://github.com/joao-luz/text2graph.git"
+```
+<!-- --8<-- [end:install] -->
+
+<!-- --8<-- [start:quickstart] -->
+## Quickstart
+
+Classify 2,000 AG News articles into 4 topics, with an LLM labeling only 50 of
+them. This example uses the OpenAI API (`pip install ".[openai]"` and set
+`OPENAI_API_KEY`).
+
+```python
+import logging
+
+from datasets import load_dataset
+from sklearn.metrics import classification_report
+
+from text2graph import LLM, Pipeline
+from text2graph.components import (
+    DocumentsToNodes, SentenceEmbeddingExtractor, KNNEdgeCreator,
+    KMeansSampler, LLMLabeler, GCNPropagator,
+)
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger('text2graph').setLevel(logging.INFO)  # show each step's progress
+
+dataset = load_dataset('fancyzhx/ag_news', split='test[:2000]')
+texts, labels = list(dataset['text']), list(dataset['label'])
+classes = {0: 'World', 1: 'Sports', 2: 'Business', 3: 'Sci/Tech'}
+
+prompt = (
+    'Classify this news article into one of these topics:\n'
+    '0) World\n1) Sports\n2) Business\n3) Sci/Tech\n\n'
+    'Article: {text}\n\n'
+    'Answer with the topic number only.'
+)
+
+llm = LLM('openai:gpt-5-mini')
+
+pipeline = Pipeline([
+    DocumentsToNodes(),                     # one node per document
+    SentenceEmbeddingExtractor(model_path='sentence-transformers/all-MiniLM-L6-v2'),
+    KNNEdgeCreator(k=10),                   # connect each document to its 10 most similar
+    KMeansSampler(n=50),                    # pick 50 representative documents...
+    LLMLabeler(model=llm, prompt_template=prompt, label_map=classes,
+               temperature=None),           # ...and have the LLM label them
+    GCNPropagator(epochs=200),              # train a GCN on those 50, label the rest
+])
+
+context = pipeline.run(documents=texts)
+
+predictions = context['graph'].pseudo_y
+print(classification_report(labels, predictions, target_names=list(classes.values())))
+```
+
+`pipeline.run` returns the context: the graph is in `context['graph']`, each
+node's predicted label in its `pseudo_y` attribute, and how each node got its
+label in `context['label_info']`. Embeddings and LLM responses are saved in
+`./cache`; pass `load_from_cache=True` to `SentenceEmbeddingExtractor` and
+`LLMLabeler` to reuse them in later runs instead of recomputing them.
+
+`temperature=None` sends no temperature, which OpenAI's reasoning models need;
+with other models, leave it out to use the labeler's default of 0.
+
+The same pipeline can be described as a config dict, with `${...}` referring to
+the keyword arguments given to `Pipeline`:
+
+```python
+config = {'steps': [
+    {'name': 'documents_to_nodes'},
+    {'name': 'sentence_embedding_extractor',
+     'parameters': {'model_path': 'sentence-transformers/all-MiniLM-L6-v2'}},
+    {'name': 'knn_edge_creator', 'parameters': {'k': 10}},
+    {'name': 'kmeans_sampler', 'parameters': {'n': 50}},
+    {'name': 'llm_labeler', 'parameters': {
+        'model': '${llm}', 'prompt_template': '${prompt}',
+        'label_map': '${classes}', 'temperature': None}},
+    {'name': 'gcn_propagator', 'parameters': {'epochs': 200}},
+]}
+
+pipeline = Pipeline(config=config, llm=llm, prompt=prompt, classes=classes)
+context = pipeline.run(documents=texts)
+```
+
+Or kept in a YAML file, `pipeline.yaml`:
 
 ```yaml
-name:
-  dataset_name
-path:
-  path/to/dataset_or_huggingface_path
-label_feature:
-  dataset_feature_for_labels
-classes:
-  0: supported
-  1: classes
-  2: in
-  3: dataset
-
-prompt_template: |
-  Template for the LLM to process a text from the dataset. Should look something like this:
-
-  You are a topic analysis tool for analysing news articles. Look at the following text:
-
-  {text}
-
-  What is the topic related to the text? Choose a topic from the following possible options:
-
-  0) supported
-  1) classes
-  2) in
-  3) dataset
-
-  Respond ONLY with the topic number and no other information.
-
-```
-For the pipeline, you must define a name and the components. Each component goes under the `component:` item in a list form (see `examples/configs/pipelines/baseline.yaml` for an in depth example). The component is identified with a name and is given its parameters:
-
-```yaml
-dataset:
-    name: name
-    components:
-        - name: first_component
-          parameters:
-            first_parameter: first_value
-            second_parameter: second_value
-            ...
+steps:
+  - name: documents_to_nodes
+  - name: sentence_embedding_extractor
+    parameters:
+      model_path: sentence-transformers/all-MiniLM-L6-v2
+  - name: knn_edge_creator
+    parameters:
+      k: 10
+  - name: kmeans_sampler
+    parameters:
+      n: 50
+  - name: llm_labeler
+    parameters:
+      model: ${llm}
+      prompt_template: ${prompt}
+      label_map: ${classes}
+      temperature: null
+  - name: gcn_propagator
+    parameters:
+      epochs: 200
 ```
 
+```python
+pipeline = Pipeline.from_yaml('pipeline.yaml', llm=llm, prompt=prompt, classes=classes)
+context = pipeline.run(documents=texts)
+```
+<!-- --8<-- [end:quickstart] -->
 
 ## Paper
 
