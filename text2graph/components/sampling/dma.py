@@ -13,8 +13,21 @@ import torch.nn.functional as F
 
 from torch_geometric.utils import remove_self_loops, scatter, add_self_loops
 from torch_geometric.data import HeteroData
-from torch_sparse import SparseTensor
 from transformers import AutoModel, AutoTokenizer
+
+
+def _sparse_tensor_class():
+    # torch_sparse is optional: only DMASampler needs it, so import it on first use.
+    try:
+        from torch_sparse import SparseTensor
+    except ImportError as e:
+        raise ImportError(
+            'DMASampler requires "torch_sparse", which is not installed. Install the build '
+            'matching your torch and CUDA versions, see '
+            'https://github.com/rusty1s/pytorch_sparse#installation'
+        ) from e
+
+    return SparseTensor
 
 
 # Originaly written in C++, ported to Python https://github.com/PKU-DAIR/Noisy-LLM-Oracle/blob/main/src/lib/cpp_extension/utils.cpp
@@ -180,14 +193,14 @@ def normalize_adj(edge_index, num_nodes, edge_weight=None):
 
 def compute_adj2(edge_index, num_nodes):
     n_edge_index, n_edge_weight = compute_rw_norm_edge_index(edge_index, num_nodes=num_nodes)
-    adj = SparseTensor(row=n_edge_index[0], col=n_edge_index[1], value=n_edge_weight,
+    adj = _sparse_tensor_class()(row=n_edge_index[0], col=n_edge_index[1], value=n_edge_weight,
                        sparse_sizes=(num_nodes, num_nodes))
     return adj
 
 
 def compute_norm_aax(x, edge_index, num_nodes):
     new_edge_index, new_edge_weight = compute_rw_norm_edge_index(edge_index, num_nodes=num_nodes)
-    adj = SparseTensor(row=new_edge_index[0], col=new_edge_index[1], value=new_edge_weight,
+    adj = _sparse_tensor_class()(row=new_edge_index[0], col=new_edge_index[1], value=new_edge_weight,
                        sparse_sizes=(num_nodes, num_nodes))
     aax = adj.matmul(x)
     aax = adj.matmul(aax)
@@ -339,6 +352,8 @@ class DMASampler(Component):
         ):
         if model is None and model_path is None:
             raise ValueError('Either pass a model or a model path')
+
+        _sparse_tensor_class()  # fail now, before loading any model, if torch_sparse is missing
 
         self.model = model if model else load_llm(model_path)
         model_path = self.model.model_name
