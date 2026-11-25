@@ -103,9 +103,12 @@ class LabelPropagator(Component):
         else:
             logger.warning('label_propagator did not converge within %d iterations (max change %.2e)', self.max_iter, diff)
 
-        row_sum = Y.sum(dim=1).clamp(min=1e-12)
-        probs, preds = (Y / row_sum.unsqueeze(-1)).max(dim=1)
+        row_sum = Y.sum(dim=1)
+        reached = row_sum > 0
+        probs, preds = (Y / row_sum.clamp(min=1e-12).unsqueeze(-1)).max(dim=1)
         preds = unique_labels[preds]
+        preds[~reached] = -1
+        probs[~reached] = 0.0
 
         return preds, probs
 
@@ -125,7 +128,7 @@ class LabelPropagator(Component):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
 
         propagating_mask = self.propagating_mask if self.propagating_mask is not None else torch.ones(type_data.num_nodes, dtype=torch.bool)
-        propagating_mask = (propagating_mask & (~train_mask))
+        propagating_mask = propagating_mask & ~train_mask & (preds != -1)
         for node_id in torch.nonzero(propagating_mask).flatten().tolist():
             context['label_info'][node_id] = {'source': 'label_propagator', 'prob': probs[node_id].item()}
             type_data[self.label_attribute][node_id] = preds[node_id]
