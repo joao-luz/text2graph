@@ -15,7 +15,6 @@ class LMPropagator(Component):
         model_path,
         epochs=15,
         lr=5e-5,
-        patience=None,
         batch_size=16,
         max_length=128,
         node_type='documents',
@@ -24,7 +23,6 @@ class LMPropagator(Component):
         self.model_path = model_path
         self.epochs = epochs
         self.lr = lr
-        self.patience = patience
         self.batch_size = batch_size
         self.max_length = max_length
         self.node_type = node_type
@@ -34,14 +32,13 @@ class LMPropagator(Component):
             'model_path': model_path,
             'epochs': epochs,
             'lr': lr,
-            'patience': patience,
             'batch_size': batch_size,
             'max_length': max_length,
             'node_type': node_type,
             'label_attribute': label_attribute
         }
 
-    def propagate(self, data, train_mask):
+    def _propagate(self, data, train_mask):
         unique_labels, new_labels = torch.unique(data[self.label_attribute][train_mask], sorted=True, return_inverse=True)
 
         num_classes = len(unique_labels)
@@ -110,7 +107,7 @@ class LMPropagator(Component):
         train_mask = type_data[self.label_attribute] != -1
         unlabeled_node_ids = torch.arange(type_data.num_nodes)[~train_mask]
 
-        preds, probs = self.propagate(type_data, train_mask)
+        preds, probs = self._propagate(type_data, train_mask)
 
         if not context.get('label_info'):
             context['label_info'] = [{} for _ in range(type_data.num_nodes)]
