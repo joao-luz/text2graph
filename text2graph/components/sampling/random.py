@@ -9,6 +9,23 @@ from torch_geometric.data import HeteroData
 
 @register_component('random_sampler')
 class RandomSampler(Component):
+    """Picks `n` random unlabeled nodes, e.g. as the documents to send to an LLM labeler.
+
+    Stores the result in `context[mask_name]`, a boolean mask over the nodes of
+    `node_type`. Only nodes whose `label_attribute` is -1 can be picked (all
+    nodes, if the attribute doesn't exist yet).
+
+    Args:
+        n: Number of nodes to pick, or a float for a fraction of all the node
+            type's nodes. If fewer nodes are unlabeled, all of them are picked.
+        node_type: Node type to sample from.
+        mask_name: Context key the mask is stored under.
+        label_attribute: Node attribute telling labeled nodes (not -1) apart.
+
+    Raises:
+        ValueError: If `node_type` isn't in the graph.
+    """
+
     def __init__(self, n=100, node_type='documents', mask_name='to_label', label_attribute='pseudo_y'):
         self.n = n
         self.node_type = node_type
@@ -22,7 +39,7 @@ class RandomSampler(Component):
             'label_attribute': label_attribute,
         }
 
-    def sample_nodes(self, data, indices):
+    def _sample_nodes(self, data, indices):
         n = self.n
         if isinstance(n, float):
             n = int(data.num_nodes*n)
@@ -47,7 +64,7 @@ class RandomSampler(Component):
 
         indices = torch.arange(type_data.num_nodes)[mask]
 
-        sampled_indices = self.sample_nodes(type_data, indices)
+        sampled_indices = self._sample_nodes(type_data, indices)
         mask = torch.zeros(type_data.num_nodes, dtype=torch.bool)
         mask[sampled_indices] = True
 

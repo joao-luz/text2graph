@@ -22,6 +22,32 @@ def _kmeans_sample(embeddings, k, random_state=42):
 
 @register_component('kmeans_sampler')
 class KMeansSampler(Component):
+    """Picks `n` representative unlabeled nodes by clustering their features.
+
+    The unlabeled nodes (`label_attribute` -1, or all nodes if the attribute
+    doesn't exist yet) are split into `n` k-means clusters, and the node closest to
+    each cluster center is picked (see `kmeans_sample`). This spreads the sample
+    over the feature space, so it covers the data better than random picks. The
+    clustering is deterministic: the same features and `random_state` always give
+    the same sample.
+
+    Stores the result in `context[mask_name]`, a boolean mask over the nodes of
+    `node_type`.
+
+    Args:
+        n: Number of clusters, and so the most nodes picked; an int. Fewer are
+            picked when two centers share their closest node.
+        node_type: Node type to sample from.
+        representation_attr: Node attribute holding the features to cluster.
+        mask_name: Context key the mask is stored under.
+        label_attribute: Node attribute telling labeled nodes (not -1) apart.
+        random_state: Seed for k-means' initialization; change it to get a
+            different (but still deterministic) sample, e.g. one per run.
+
+    Raises:
+        ValueError: If `node_type` isn't in the graph.
+    """
+
     def __init__(self, n=100, node_type='documents', representation_attr='x', mask_name='to_label', label_attribute='pseudo_y', random_state=42):
         self.node_type = node_type
         self.representation_attr = representation_attr
