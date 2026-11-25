@@ -6,6 +6,16 @@ from torch_geometric.nn import GCNConv, HeteroConv, SAGEConv, HANConv
 
 
 class GCN(torch.nn.Module):
+    """Graph Convolutional Network: a stack of `GCNConv` layers with ReLU in between.
+
+    Args:
+        in_channels: Size of the input node features.
+        hidden_channels: Size of the hidden layers.
+        out_channels: Size of the output, e.g. the number of classes.
+        num_layers: Number of `GCNConv` layers, at least 1 (then `hidden_channels`
+            is unused).
+    """
+
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2):
         super().__init__()
 
@@ -25,6 +35,16 @@ class GCN(torch.nn.Module):
 
 
 class MLP(torch.nn.Module):
+    """Multi-layer perceptron: a stack of linear layers with ReLU in between.
+
+    Args:
+        in_channels: Size of the input features.
+        hidden_channels: Size of the hidden layers.
+        out_channels: Size of the output, e.g. the number of classes.
+        num_layers: Number of linear layers, at least 1 (then `hidden_channels` is
+            unused).
+    """
+
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2):
         super().__init__()
 
@@ -36,6 +56,7 @@ class MLP(torch.nn.Module):
             self.lins.append(lin)
 
     def forward(self, x):
+        """Return the output for every row of `x`, shape `[num_rows, out_channels]` (no softmax)."""
         for i, lin in enumerate(self.lins):
             x = lin(x)
             if i < len(self.lins) - 1:
@@ -44,6 +65,18 @@ class MLP(torch.nn.Module):
 
 
 class HeteroGNN(torch.nn.Module):
+    """Heterogeneous GraphSAGE: each layer has one `SAGEConv` per edge type, and a
+    node type's outputs from its different incoming edge types are summed. ReLU
+    is applied between layers.
+
+    Args:
+        edge_types: List of `(source_type, relation, destination_type)` edge types,
+            as in the graph.
+        hidden_channels: Size of the hidden layers.
+        out_channels: Size of the output, e.g. the number of classes.
+        num_layers: Number of layers, at least 1 (then `hidden_channels` is unused).
+    """
+
     def __init__(self, edge_types, hidden_channels, out_channels, num_layers=2):
         super().__init__()
 
@@ -67,12 +100,19 @@ class HeteroGNN(torch.nn.Module):
 class HAN(nn.Module):
     """Heterogeneous GNN using HANConv (node-level + semantic-level attention).
 
-    Every node type is first linearly projected into hidden_channels, so that
-    node types with no incoming edges at some (or all) layers -- which pass
-    through HANConv unchanged -- stay dimensionally consistent with node
-    types that do get updated, instead of drifting back to their raw input
-    width.
+    Args:
+        metadata: `(node_types, edge_types)`, as given by `HeteroData.metadata()`.
+        hidden_channels: Size of the projections and hidden layers; must be
+            divisible by `heads`.
+        out_channels: Size of the output, e.g. the number of classes.
+        num_layers: Number of `HANConv` layers.
+        heads: Number of attention heads per layer.
+        dropout: Dropout on the attention weights.
+
+    Raises:
+        ValueError: If `hidden_channels` isn't divisible by `heads`.
     """
+
     def __init__(self, metadata, hidden_channels, out_channels, num_layers=2, heads=8, dropout=0.0):
         super().__init__()
 
